@@ -60,20 +60,28 @@ static void format_seconds(gint64 t, char *buf) {
 /*
  * Date and time with a time-sensitive clock icon
  */
-static void print_datetime(struct tm *tm, char *timebuf) {
+static void item_datetime() {
+	struct tm *tm;
+	time_t t;
+	char timebuf[TIMEBUF_SIZE];
+
+	t = time(NULL);
+	if ((tm = localtime(&t)) == NULL)
+		error(1, errno, "localtime");
+
 	char clock[5] = "\xf0\x9f\x95\x0\x0";
 	clock[3] = tm->tm_hour == 0 ? 0x9b : 0x90 + (tm->tm_hour - 1) % 12;
 
 	if (strftime(timebuf, TIMEBUF_SIZE, "%a %-d %b %R", tm) == 0)
 		error(1, errno, "strftime");
 
-	printf("%s %s", clock, timebuf);
+	I3BAR_ITEM("datetime", printf("%s %s", clock, timebuf));
 }
 
 /*
  * Battery charge level and remaining time
  */
-static void print_battery(GDBusConnection *conn) {
+static void item_battery(GDBusConnection *conn) {
 	GVariant *p = get_upower_property(conn, "Percentage");
 	GVariant *te = get_upower_property(conn, "TimeToEmpty");
 	GVariant *tf = get_upower_property(conn, "TimeToFull");
@@ -104,26 +112,36 @@ static void print_battery(GDBusConnection *conn) {
 /*
  * System load (5 minute average) and concise uptime
  */
-static void print_sysinfo(struct sysinfo *si) {
-	float load_5min = si->loads[0] / (float) (1 << SI_LOAD_SHIFT);
-	long up_hours   = si->uptime / 3600;
-	long up_days    = up_hours / 24;
+static void item_sysinfo() {
+	struct sysinfo s;
 
-	up_hours -= up_days * 24;
+	if (sysinfo(&s) != 0)
+		error(1, errno, "sysinfo");
 
-	printf(UNICODE_LINUX_BIRD " %.2f %ldd %ldh",
-			load_5min, up_days, up_hours);
+	float load_5min = s.loads[0] / (float) (1 << SI_LOAD_SHIFT);
+
+	long up_hours = s.uptime / 3600;
+	long up_days  = up_hours  / 24;
+	up_hours     -= up_days * 24;
+
+	I3BAR_ITEM("sysinfo", printf(UNICODE_LINUX_BIRD " %.2f %ldd %ldh",
+				load_5min, up_days, up_hours));
 }
 
 /*
  * Percentage of used space on the filesystem
  */
-static void print_fs_usage(struct statfs *s) {
-	unsigned long total = s->f_blocks;
-	unsigned long used  = total - s->f_bfree;
+static void item_fs_usage() {
+	struct statfs s;
+
+	if (statfs("/", &s) != 0)
+		error(1, errno, "statfs");
+
+	unsigned long total = s.f_blocks;
+	unsigned long used  = total - s.f_bfree;
 	float used_percent  = (100.0f / total) * used;
 
-	printf(UNICODE_FLOPPY " %.1f%%", used_percent);
+	I3BAR_ITEM("fs_usage", printf(UNICODE_FLOPPY " %.1f%%", used_percent));
 }
 
 static GDBusConnection *dbus_system_connect() {
@@ -141,38 +159,23 @@ static GDBusConnection *dbus_system_connect() {
 }
 
 int main() {
-	struct tm	*tm;
-	time_t		 tt;
-	char		 timebuf[TIMEBUF_SIZE];
-	struct sysinfo	 si;
-	struct statfs	 sfs;
-	GDBusConnection	*conn;
-
 	// This stops glibc from doing a superfluous stat() for every
 	// strftime(). It's an asinine micro-optimization, but, for fun and no
 	// profit, I'd like this program as efficient as I can make it.
 	if (setenv("TZ", ":/etc/localtime", 0) == -1)
 		error(1, errno, "setenv");
 
-	conn = dbus_system_connect();
+	GDBusConnection	*conn = dbus_system_connect();
 
 	puts("{\"version\": 1}\n[\n[]");
 	while (1) {
-		tt = time(NULL);
-		if ((tm = localtime(&tt)) == NULL)
-			error(1, errno, "localtime");
-
-		if (sysinfo(&si) != 0)
-			error(1, errno, "sysinfo");
-
-		if (statfs("/", &sfs) != 0)
-			error(1, errno, "statfs");
-
 		printf(",[");
-		I3BAR_ITEM("fsusage", print_fs_usage(&sfs));
-		I3BAR_ITEM("sysinfo", print_sysinfo(&si));
-		print_battery(conn);
-		I3BAR_ITEM("datetime", print_datetime(tm, timebuf));
+
+		item_fs_usage();
+		item_sysinfo();
+		item_battery(conn);
+		item_datetime();
+
 		printf("]\n");
 
 		fflush(stdout);
