@@ -4,11 +4,14 @@ This is my status line program. There are many like it, but this one is mine.
 
 This is a modest C program that serves as my
 [sway](https://github.com/swaywm/sway) status line generator, written for fun
-and C practice. Among its features are:
+and C practice. It currently displays:
 
-  * PulseAudio volume level/mute state
-  * System load and uptime
   * Used disk space
-  * WiFi status
-  * Battery level and estimated time remaining
+  * System load and uptime
+  * Battery level and estimated remaining charge/discharge time
   * Date and time
+
+Not yet implemented:
+
+  * WiFi status
+  * PulseAudio volume level/mute state
