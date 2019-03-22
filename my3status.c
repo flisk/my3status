@@ -15,23 +15,9 @@
 	printf("\"},")
 
 #define TIMEBUF_SIZE 32
+#define UNICODE_LINUX_BIRD "\xf0\x9f\x90\xa7"
+#define UNICODE_FLOPPY "\xf0\x9f\x92\xbe"
 
-/*
- * Date and time with a time-sensitive clock icon
- */
-static void print_datetime(struct tm *tm, char *timebuf) {
-	char clock[5] = "\xf0\x9f\x95\x0\x0";
-	clock[3] = tm->tm_hour == 0 ? 0x9b : 0x90 + (tm->tm_hour - 1) % 12;
-
-	if (strftime(timebuf, TIMEBUF_SIZE, "%a %-d %b %R", tm) == 0)
-		error(1, errno, "strftime");
-
-	printf("%s %s", clock, timebuf);
-}
-
-/*
- * Battery charge level and remaining time
- */
 static GVariant *get_upower_property(
 		GDBusConnection *conn,
 		const char *prop_name) {
@@ -71,6 +57,22 @@ static void format_seconds(gint64 t, char *buf) {
 	sprintf(buf, "%ld:%02ld", hours, minutes);
 }
 
+/*
+ * Date and time with a time-sensitive clock icon
+ */
+static void print_datetime(struct tm *tm, char *timebuf) {
+	char clock[5] = "\xf0\x9f\x95\x0\x0";
+	clock[3] = tm->tm_hour == 0 ? 0x9b : 0x90 + (tm->tm_hour - 1) % 12;
+
+	if (strftime(timebuf, TIMEBUF_SIZE, "%a %-d %b %R", tm) == 0)
+		error(1, errno, "strftime");
+
+	printf("%s %s", clock, timebuf);
+}
+
+/*
+ * Battery charge level and remaining time
+ */
 static void print_battery(GDBusConnection *conn) {
 	GVariant *p = get_upower_property(conn, "Percentage");
 	GVariant *te = get_upower_property(conn, "TimeToEmpty");
@@ -99,8 +101,6 @@ static void print_battery(GDBusConnection *conn) {
 	}
 }
 
-#define UNICODE_LINUX_BIRD "\xf0\x9f\x90\xa7"
-
 /*
  * System load (5 minute average) and concise uptime
  */
@@ -114,8 +114,6 @@ static void print_sysinfo(struct sysinfo *si) {
 	printf(UNICODE_LINUX_BIRD " %.2f %ldd %ldh",
 			load_5min, up_days, up_hours);
 }
-
-#define UNICODE_FLOPPY "\xf0\x9f\x92\xbe"
 
 /*
  * Percentage of used space on the filesystem
