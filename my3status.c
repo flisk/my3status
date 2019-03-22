@@ -7,7 +7,6 @@
 #include <stdlib.h>
 #include <time.h>
 #include <unistd.h>
-#include <string.h>
 #include <gio/gio.h>
 
 #define I3BAR_ITEM(name, full_text) \
