@@ -17,11 +17,17 @@
 
 #define TIMEBUF_SIZE 32
 
-void print_datetime(struct tm *tm, char *timebuf) {
+/*
+ * Date and time with a time-sensitive clock icon
+ */
+static void print_datetime(struct tm *tm, char *timebuf) {
+	char clock[5] = "\xf0\x9f\x95\x0\x0";
+	clock[3] = tm->tm_hour == 0 ? 0x9b : 0x90 + (tm->tm_hour - 1) % 12;
+
 	if (strftime(timebuf, TIMEBUF_SIZE, "%a %-d %b %R", tm) == 0)
 		error(1, errno, "strftime");
 
-	printf("%s", timebuf);
+	printf("%s %s", clock, timebuf);
 }
 
 /*
