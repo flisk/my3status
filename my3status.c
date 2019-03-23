@@ -69,15 +69,14 @@ static void format_seconds(gint64 t, char *buf) {
  * Date and time with a time-sensitive clock icon
  */
 static void item_datetime() {
-	struct tm *tm;
-	time_t t;
 	char timebuf[TIMEBUF_SIZE];
+	time_t t = time(NULL);
+	struct tm *tm;
 
-	t = time(NULL);
 	if ((tm = localtime(&t)) == NULL)
 		error(1, errno, "localtime");
 
-	char clock[5] = "\xf0\x9f\x95\x0\x0";
+	char clock[5] = {0xf0, 0x9f, 0x95, 0, 0};
 	clock[3] = tm->tm_hour == 0 ? 0x9b : 0x90 + (tm->tm_hour - 1) % 12;
 
 	if (strftime(timebuf, TIMEBUF_SIZE, "%a %-d %b %R", tm) == 0)
