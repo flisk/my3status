@@ -58,7 +58,7 @@ static GVariant *get_upower_property(
 	return v;
 }
 
-static void format_seconds(gint64 t, char *buf) {
+static void item_battery_format_seconds(gint64 t, char *buf) {
 	gint64 minutes = t % 60;
 	gint64 hours = t / 60 / 60;
 
@@ -101,19 +101,27 @@ static void item_battery(GDBusConnection *conn) {
 	g_variant_unref(te);
 	g_variant_unref(tf);
 
-	if (time_to_empty > 0) { // Discharging
-		char buf[32];
-		format_seconds(time_to_empty, buf);
-
-		I3BAR_ITEM("battery", printf("🔋 %d%% (%s)",
-					(int) percent, buf));
-	} else if (time_to_full > 0) { // Charging
-		char buf[32];
-		format_seconds(time_to_full, buf);
-
-		I3BAR_ITEM("battery", printf("🔋⚡ %d%% (%s)",
-					(int) percent, buf));
+	if (percent == 100.0 && time_to_empty == 0) {
+	  // On AC, fully charged. Don't display the item.
+	  return;
 	}
+
+	char buf[32];
+	char *status_char = "";
+
+	if (time_to_empty > 0) {
+	  // Discharging
+	  item_battery_format_seconds(time_to_empty, buf);
+	} else if (time_to_full > 0) {
+	  // Charging
+	  item_battery_format_seconds(time_to_full, buf);
+	  status_char = "⚡";
+	} else {
+	  buf[0] = 0;
+	}
+
+	I3BAR_ITEM("battery", printf("🔋%s %d%%%s",
+				     status_char, (int) percent, buf));
 }
 
 /*
