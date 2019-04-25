@@ -107,21 +107,24 @@ static void item_battery(GDBusConnection *conn) {
 	}
 
 	char buf[32];
-	char *status_char = "";
+	const char *status_char = "";
+	const char *space = "";
 
 	if (time_to_empty > 0) {
 	  // Discharging
 	  item_battery_format_seconds(time_to_empty, buf);
+	  space = " ";
 	} else if (time_to_full > 0) {
 	  // Charging
 	  item_battery_format_seconds(time_to_full, buf);
 	  status_char = "⚡";
+	  space = " ";
 	} else {
 	  buf[0] = 0;
 	}
 
-	I3BAR_ITEM("battery", printf("🔋%s %d%%%s",
-				     status_char, (int) percent, buf));
+	I3BAR_ITEM("battery", printf("🔋%s %d%%%s%s",
+				     status_char, (int) percent, space, buf));
 }
 
 /*
