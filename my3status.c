@@ -148,7 +148,7 @@ static void item_fs_usage() {
 	unsigned long used  = total - s.f_bfree;
 	float used_percent  = (100.0f / total) * used;
 
-	I3BAR_ITEM("fs_usage", printf(UNICODE_FLOPPY " %.1f%%", used_percent));
+	I3BAR_ITEM("fs_usage", printf(UNICODE_FLOPPY " %.0f%%", used_percent));
 }
 
 static void item_alsa_volume() {
