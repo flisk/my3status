@@ -237,13 +237,16 @@ static void on_signal(int sig) {
 int main() {
 	signal(SIGUSR1, on_signal);
 
-	// This stops glibc from doing a superfluous stat() for every
-	// strftime(). It's an asinine micro-optimization, but, for fun and no
-	// profit, I'd like this program as efficient as I can make it.
+	/*
+	 * This stops glibc from doing a superfluous stat() for every
+	 * strftime(). It's an asinine micro-optimization, but, for
+	 * fun and no profit, I'd like this program as efficient as I
+	 * can make it.
+	 */
 	if (setenv("TZ", ":/etc/localtime", 0) != 0)
 		error(1, errno, "setenv");
 
-	GDBusConnection	*conn = dbus_system_connect();
+	GDBusConnection *conn = dbus_system_connect();
 
 	puts("{\"version\": 1}\n[\n[]");
 	while (1) {
