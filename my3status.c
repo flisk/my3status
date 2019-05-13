@@ -1,21 +1,15 @@
 /* vim: set noet ts=8 sw=8: */
+#include <gio/gio.h>
 #include <sys/sysinfo.h>
 #include <sys/vfs.h>
 #include <errno.h>
+#include <error.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
 #include <unistd.h>
-#include <signal.h>
-#include <gio/gio.h>
-#include <alsa/asoundlib.h>
-
-/*
- * When compiling with ALSA's header directories, `#include <error.h>` will
- * resolve to `/usr/include/alsa/error.h` instead of `/usr/include/error.h` --
- * the latter can only be included by its absolute path.
- */
-#include "/usr/include/error.h"
+#include "pulseaudio.h"
 
 #define I3BAR_ITEM(name, full_text) \
 	printf("{\"name\":\"" name "\",\"full_text\":\""); \
@@ -171,61 +165,25 @@ static void item_fs_usage() {
 	I3BAR_ITEM("fs_usage", printf(UNICODE_FLOPPY " %.0f%%", used_percent));
 }
 
-static void item_alsa_volume() {
-	snd_mixer_selem_id_t *sid;
-	snd_mixer_selem_id_alloca(&sid);
-	snd_mixer_selem_id_set_index(sid, 0);
-	snd_mixer_selem_id_set_name(sid, "Master");
+static void item_pulse_volume(struct my3status_pa_state *pa_state) {
+	if (my3status_pa_update(pa_state) == -1)
+		return;
 
-	snd_mixer_t *mixer;
-	if ((snd_mixer_open(&mixer, 0)) < 0)
-		error(1, 0, "snd_mixer_open");
+	/*
+	 * Integer-dividing the volume by 34 gives an offset we can add to
+	 * 0x88, producing the appropriate speaker volume emojis:
+	 *
+	 *   0% -  33% → 0 (speaker low volume)
+	 *  34% -  66% → 1 (speaker medium volume)
+	 *  67% - 100% → 2 (speaker high volume)
+	 */
+	char icon[5] = {
+		0xf0, 0x9f, 0x94,
+		pa_state->muted ? 0x87 : 0x88 + pa_state->volume / 34,
+		0
+	};
 
-	if ((snd_mixer_attach(mixer, "default")) < 0)
-		error(1, 0, "snd_mixer_attach");
-
-	if ((snd_mixer_selem_register(mixer, NULL, NULL)) < 0)
-		error(1, 0, "snd_mixer_selem_register");
-
-	int ret = snd_mixer_load(mixer);
-	if (ret < 0)
-		error(1, 0, "snd_mixer_load");
-
-	snd_mixer_elem_t *elem = snd_mixer_find_selem(mixer, sid);
-	if (!elem)
-		error(1, 0, "snd_mixer_find_selem");
-
-	long minv, maxv;
-	snd_mixer_selem_get_playback_volume_range(elem, &minv, &maxv);
-
-	long volume;
-	if (snd_mixer_selem_get_playback_volume(elem, 0, &volume) < 0)
-		error(1, 0, "snd_mixer_selem_get_playback_volume");
-
-	int switch_value;
-	if (snd_mixer_selem_get_playback_switch(elem, 0, &switch_value) < 0)
-		error(1, 0, "snd_mixer_selem_get_playback_switch");
-
-	snd_mixer_close(mixer);
-
-	int volume_percent = (int) ((100.0 / maxv) * volume);
-
-	char speaker[5] = {0xf0, 0x9f, 0x94, 0, 0};
-	if (switch_value) {
-		// Integer divison of the volume by 34 produces an offset for
-		// adding to the low volume speaker emoji:
-		//
-		//   0% -  33% → 0
-		//  34% -  66% → 1 (speaker medium volume)
-		//  67% - 100% → 2 (speaker high volume)
-		//
-		speaker[3] = 0x88 + volume_percent / 34;
-	} else {
-		// muted speaker
-		speaker[3] = 0x87;
-	}
-
-	I3BAR_ITEM("volume_alsa", printf("%s %d%%", speaker, volume_percent));
+	I3BAR_ITEM("volume_pulse", printf("%s %d%%", icon, pa_state->volume));
 }
 
 static GDBusConnection *dbus_system_connect() {
@@ -260,10 +218,13 @@ int main() {
 
 	GDBusConnection *conn = dbus_system_connect();
 
+	struct my3status_pa_state pa_state = {0};
+	my3status_pa_init(&pa_state);
+
 	fputs("{\"version\": 1}\n[\n[]\n", stdout);
 	while (1) {
 		fputs(",[", stdout);
-		item_alsa_volume();
+		item_pulse_volume(&pa_state);
 		item_fs_usage();
 		item_sysinfo();
 		item_battery(conn);
