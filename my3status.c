@@ -260,17 +260,15 @@ int main() {
 
 	GDBusConnection *conn = dbus_system_connect();
 
-	puts("{\"version\": 1}\n[\n[]");
+	fputs("{\"version\": 1}\n[\n[]\n", stdout);
 	while (1) {
-		printf(",[");
-
+		fputs(",[", stdout);
 		item_alsa_volume();
 		item_fs_usage();
 		item_sysinfo();
 		item_battery(conn);
 		item_datetime();
-
-		printf("]\n");
+		fputs("]\n", stdout);
 
 		fflush(stdout);
 		sleep(10);
