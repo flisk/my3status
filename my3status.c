@@ -89,42 +89,51 @@ static void item_datetime() {
  * Battery charge level and remaining time
  */
 static void item_battery(GDBusConnection *conn) {
-	GVariant *p = get_upower_property(conn, "Percentage");
-	GVariant *te = get_upower_property(conn, "TimeToEmpty");
-	GVariant *tf = get_upower_property(conn, "TimeToFull");
+	GVariant *device_type_v = get_upower_property(conn, "Type");
+	guint32 device_type = g_variant_get_uint32(device_type_v);
+	g_variant_unref(device_type_v);
 
-	gdouble percent = g_variant_get_double(p);
-	gint64 time_to_empty = g_variant_get_int64(te);
-	gint64 time_to_full = g_variant_get_int64(tf);
+	if (device_type != 2)
+		return;
 
-	g_variant_unref(p);
-	g_variant_unref(te);
-	g_variant_unref(tf);
+	GVariant *percent_v = get_upower_property(conn, "Percentage");
+	GVariant *time_to_empty_v = get_upower_property(conn, "TimeToEmpty");
 
-	if (percent == 100.0 && time_to_empty == 0) {
-	  // On AC, fully charged. Don't display the item.
-	  return;
-	}
+	gdouble percent = g_variant_get_double(percent_v);
+	gint64 time_to_empty = g_variant_get_int64(time_to_empty_v);
+
+	g_variant_unref(percent_v);
+	g_variant_unref(time_to_empty_v);
+
+	// On AC, fully charged. Don't display the item.
+	if (percent == 100.0 && time_to_empty == 0)
+		return;
 
 	char buf[32];
 	const char *status_char = "";
 	const char *space = "";
 
 	if (time_to_empty > 0) {
-	  // Discharging
-	  item_battery_format_seconds(time_to_empty, buf);
-	  space = " ";
-	} else if (time_to_full > 0) {
-	  // Charging
-	  item_battery_format_seconds(time_to_full, buf);
-	  status_char = "⚡";
-	  space = " ";
+		// Discharging
+		item_battery_format_seconds(time_to_empty, buf);
+		space = " ";
 	} else {
-	  buf[0] = 0;
+		GVariant *time_to_full_v = get_upower_property(conn, "TimeToFull");
+		gint64 time_to_full = g_variant_get_int64(time_to_full_v);
+		g_variant_unref(time_to_full_v);
+
+		if (time_to_full > 0) {
+			// Charging
+			item_battery_format_seconds(time_to_full, buf);
+			status_char = "⚡";
+			space = " ";
+		} else {
+			buf[0] = 0;
+		}
 	}
 
 	I3BAR_ITEM("battery", printf("🔋%s %d%%%s%s",
-				     status_char, (int) percent, space, buf));
+				status_char, (int) percent, space, buf));
 }
 
 /*
