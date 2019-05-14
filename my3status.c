@@ -179,7 +179,7 @@ static void item_pulse_volume(struct my3status_pa_state *pa_state) {
 	 */
 	char icon[5] = {
 		0xf0, 0x9f, 0x94,
-		pa_state->muted ? 0x87 : 0x88 + pa_state->volume / 34,
+		pa_state->muted ? 0x87 : 0x88 + MIN(pa_state->volume / 34, 2),
 		0
 	};
 
