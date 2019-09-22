@@ -1,5 +1,4 @@
 /* vim: set noet ts=8 sw=8: */
-#include <gio/gio.h>
 #include <sys/sysinfo.h>
 #include <sys/vfs.h>
 #include <errno.h>
@@ -11,6 +10,9 @@
 #include <unistd.h>
 #include "pulseaudio.h"
 
+#include <gio/gio.h>
+#include <libvirt/libvirt.h>
+
 #define I3BAR_ITEM(name, full_text) \
 	printf("{\"name\":\"" name "\",\"full_text\":\""); \
 	full_text; \
@@ -19,10 +21,10 @@
 #define TIMEBUF_SIZE 32
 #define UNICODE_LINUX_BIRD "\xf0\x9f\x90\xa7"
 #define UNICODE_FLOPPY "\xf0\x9f\x92\xbe"
+#define UNICODE_PACKAGE "\xf0\x9f\x93\xa6"
 
-static GVariant *get_upower_property(
-		GDBusConnection *conn,
-		const char *prop_name) {
+static GVariant *get_upower_property(GDBusConnection *conn,
+				     const char *prop_name) {
 	GError *err = NULL;
 	GVariant *res = g_dbus_connection_call_sync(
 			conn,
@@ -70,8 +72,14 @@ static void item_datetime() {
 	if ((tm = localtime(&t)) == NULL)
 		error(1, errno, "localtime");
 
-	char clock[5] = {0xf0, 0x9f, 0x95, 0, 0};
-	clock[3] = tm->tm_hour == 0 ? 0x9b : 0x90 + (tm->tm_hour - 1) % 12;
+	char clock[5] =
+		{
+		 0xf0,
+		 0x9f,
+		 0x95,
+		 tm->tm_hour == 0 ? 0x9b : 0x90 + (tm->tm_hour - 1) % 12,
+		 0
+		};
 
 	if (strftime(timebuf, TIMEBUF_SIZE, "%a %-d %b %R", tm) == 0)
 		error(1, errno, "strftime");
@@ -186,6 +194,13 @@ static void item_pulse_volume(struct my3status_pa_state *pa_state) {
 	I3BAR_ITEM("volume_pulse", printf("%s %d%%", icon, pa_state->volume));
 }
 
+static void item_libvirt_domains(virConnectPtr conn) {
+	int active_domains = virConnectNumOfDomains(conn);
+
+	I3BAR_ITEM("libvirt_domains",
+		   printf("%s %d", UNICODE_PACKAGE, active_domains));
+}
+
 static GDBusConnection *dbus_system_connect() {
 	GDBusConnection *conn;
 	GError *err = NULL;
@@ -221,15 +236,21 @@ int main() {
 	struct my3status_pa_state pa_state = {0};
 	my3status_pa_init(&pa_state);
 
-	fputs("{\"version\": 1}\n[\n[]\n", stdout);
+	virConnectPtr libvirtConn = virConnectOpenReadOnly("qemu:///system");
+	if (libvirtConn == NULL) {
+		error(1, 0, "virConnectOpenReadOnly");
+	}
+
+	puts("{\"version\": 1}\n[\n[]");
 	while (1) {
 		fputs(",[", stdout);
+		item_libvirt_domains(libvirtConn);
 		item_pulse_volume(&pa_state);
 		item_fs_usage();
 		item_sysinfo();
 		item_battery(conn);
 		item_datetime();
-		fputs("]\n", stdout);
+		puts("]");
 
 		fflush(stdout);
 		sleep(10);
