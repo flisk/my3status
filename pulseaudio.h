@@ -4,6 +4,7 @@
 struct my3status_pa_state {
 	pa_threaded_mainloop	*mainloop;
 	pa_context		*context;
+	pthread_t		 main_thread;
 	unsigned int		 muted;
 	unsigned int		 volume;
 };
