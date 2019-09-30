@@ -149,6 +149,18 @@ static void item_libvirt_domains(virConnectPtr conn) {
 		   printf("%s %d", UNICODE_PACKAGE, active_domains));
 }
 
+static void sleep_until_next_minute() {
+	time_t now = time(NULL);
+	struct tm *tm = localtime(&now);
+
+	/* The extra second means our displayed time will always drag
+	   by one second, but it (hopefully) won't miss minute changes
+	   during leap seconds. */
+	int remaining_seconds = 61 - tm->tm_sec;
+
+	sleep(remaining_seconds);
+}
+
 static void on_signal(__attribute__((unused)) int signum) {
 }
 
@@ -190,6 +202,6 @@ int main() {
 			error(1, errno, "fflush");
 		}
 
-		sleep(10);
+		sleep_until_next_minute();
 	}
 }
