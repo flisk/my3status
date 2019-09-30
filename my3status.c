@@ -8,6 +8,7 @@
 #include <stdlib.h>
 #include <time.h>
 #include <unistd.h>
+#include <pthread.h>
 
 #include <libvirt/libvirt.h>
 
@@ -61,25 +62,28 @@ static void item_upower_format_seconds(gint64 t, char *buf) {
  * Battery charge level and remaining time
  */
 static void item_upower(struct my3status_upower_state *state) {
-	if (!my3status_upower_update(state)) {
-		I3BAR_ITEM("upower", printf("🔋 ⚠"));
-		return;
-	}
-
 	char time_buf[32] = { 0 };
 	const char *indicator = "";
 
-	if (state->time_to_empty > 0) {
+	pthread_mutex_lock(&state->mutex);
+
+	gint64 time_to_empty = state->time_to_empty;
+	gint64 time_to_full = state->time_to_full;
+	gdouble percent = state->percent;
+
+	pthread_mutex_unlock(&state->mutex);
+
+	if (time_to_empty > 0) {
 		// Discharging
-		item_upower_format_seconds(state->time_to_empty, time_buf);
-	} else if (state->time_to_full > 0) {
+		item_upower_format_seconds(time_to_empty, time_buf);
+	} else if (time_to_full > 0) {
 		// Charging
-		item_upower_format_seconds(state->time_to_full, time_buf);
+		item_upower_format_seconds(time_to_full, time_buf);
 		indicator = "⚡";
 	}
 
 	I3BAR_ITEM("upower", printf("🔋%s %d%%%s",
-				    indicator, (int) state->percent, time_buf));
+				    indicator, (int) percent, time_buf));
 }
 
 /*
@@ -162,6 +166,7 @@ int main() {
 	my3status_pa_init(&pa_state);
 
 	struct my3status_upower_state upower_state = { 0 };
+	my3status_upower_init(&upower_state);
 
 	virConnectPtr libvirtConn = virConnectOpenReadOnly("qemu:///system");
 	if (libvirtConn == NULL) {
