@@ -8,10 +8,11 @@
 #include <stdlib.h>
 #include <time.h>
 #include <unistd.h>
-#include "pulseaudio.h"
 
-#include <gio/gio.h>
 #include <libvirt/libvirt.h>
+
+#include "pulseaudio.h"
+#include "upower.h"
 
 #define I3BAR_ITEM(name, full_text) \
 	printf("{\"name\":\"" name "\",\"full_text\":\""); \
@@ -22,44 +23,6 @@
 #define UNICODE_LINUX_BIRD "\xf0\x9f\x90\xa7"
 #define UNICODE_FLOPPY "\xf0\x9f\x92\xbe"
 #define UNICODE_PACKAGE "\xf0\x9f\x93\xa6"
-
-static GVariant *get_upower_property(GDBusConnection *conn,
-				     const char *prop_name) {
-	GError *err = NULL;
-	GVariant *res = g_dbus_connection_call_sync(
-			conn,
-			"org.freedesktop.UPower",
-			"/org/freedesktop/UPower/devices/DisplayDevice",
-			"org.freedesktop.DBus.Properties",
-			"Get",
-			g_variant_new("(ss)",
-				"org.freedesktop.UPower.Device",
-				prop_name),
-			NULL,
-			G_DBUS_CALL_FLAGS_NONE,
-			-1,
-			NULL,
-			&err);
-
-	if (err) {
-		fprintf(stderr, "g_dbus_connection_call_sync: %i: %s",
-				err->code, err->message);
-		exit(1);
-	}
-
-	GVariant *v;
-	g_variant_get(res, "(v)", &v);
-	g_variant_unref(res);
-
-	return v;
-}
-
-static void item_battery_format_seconds(gint64 t, char *buf) {
-	gint64 minutes = t % 60;
-	gint64 hours = t / 60 / 60;
-
-	sprintf(buf, "%ld:%02ld", hours, minutes);
-}
 
 /*
  * Date and time with a time-sensitive clock icon
@@ -87,55 +50,36 @@ static void item_datetime() {
 	I3BAR_ITEM("datetime", printf("%s %s", clock, timebuf));
 }
 
+static void item_upower_format_seconds(gint64 t, char *buf) {
+	gint64 minutes = t % 60;
+	gint64 hours = t / 60 / 60;
+
+	sprintf(buf, " %ld:%02ld", hours, minutes);
+}
+
 /*
  * Battery charge level and remaining time
  */
-static void item_battery(GDBusConnection *conn) {
-	GVariant *device_type_v = get_upower_property(conn, "Type");
-	guint32 device_type = g_variant_get_uint32(device_type_v);
-	g_variant_unref(device_type_v);
-
-	if (device_type != 2)
+static void item_upower(struct my3status_upower_state *state) {
+	if (!my3status_upower_update(state)) {
+		I3BAR_ITEM("upower", printf("🔋 ⚠"));
 		return;
-
-	GVariant *percent_v = get_upower_property(conn, "Percentage");
-	GVariant *time_to_empty_v = get_upower_property(conn, "TimeToEmpty");
-
-	gdouble percent = g_variant_get_double(percent_v);
-	gint64 time_to_empty = g_variant_get_int64(time_to_empty_v);
-
-	g_variant_unref(percent_v);
-	g_variant_unref(time_to_empty_v);
-
-	// On AC, fully charged. Don't display the item.
-	if (percent == 100.0 && time_to_empty == 0)
-		return;
-
-	char buf[32];
-	const char *status_char = "";
-	const char *space = "";
-
-	if (time_to_empty > 0) {
-		// Discharging
-		item_battery_format_seconds(time_to_empty, buf);
-		space = " ";
-	} else {
-		GVariant *time_to_full_v = get_upower_property(conn, "TimeToFull");
-		gint64 time_to_full = g_variant_get_int64(time_to_full_v);
-		g_variant_unref(time_to_full_v);
-
-		if (time_to_full > 0) {
-			// Charging
-			item_battery_format_seconds(time_to_full, buf);
-			status_char = "⚡";
-			space = " ";
-		} else {
-			buf[0] = 0;
-		}
 	}
 
-	I3BAR_ITEM("battery", printf("🔋%s %d%%%s%s",
-				status_char, (int) percent, space, buf));
+	char time_buf[32] = { 0 };
+	const char *indicator = "";
+
+	if (state->time_to_empty > 0) {
+		// Discharging
+		item_upower_format_seconds(state->time_to_empty, time_buf);
+	} else if (state->time_to_full > 0) {
+		// Charging
+		item_upower_format_seconds(state->time_to_full, time_buf);
+		indicator = "⚡";
+	}
+
+	I3BAR_ITEM("upower", printf("🔋%s %d%%%s",
+				    indicator, (int) state->percent, time_buf));
 }
 
 /*
@@ -201,54 +145,39 @@ static void item_libvirt_domains(virConnectPtr conn) {
 		   printf("%s %d", UNICODE_PACKAGE, active_domains));
 }
 
-static GDBusConnection *dbus_system_connect() {
-	GDBusConnection *conn;
-	GError *err = NULL;
-
-	conn = g_bus_get_sync(G_BUS_TYPE_SYSTEM, NULL, &err);
-	if (err) {
-		fprintf(stderr, "g_bus_get_sync: %i: %s\n",
-				err->code, err->message);
-		exit(1);
-	}
-
-	return conn;
-}
-
-static void on_signal(int sig) {
-	sig = sig;
+static void on_signal(__attribute__((unused)) int signum) {
 }
 
 int main() {
+	/* No-op signal handler because SIGUSR1 won't interrupt
+	   sleep() with signal(SIGUSR1, SIG_IGN) */
 	signal(SIGUSR1, on_signal);
 
-	/*
-	 * This stops glibc from doing a superfluous stat() for every
-	 * strftime(). It's an asinine micro-optimization, but, for
-	 * fun and no profit, I'd like this program as efficient as I
-	 * can make it.
-	 */
+	/* Stop glibc from running a superfluous stat() on each
+	   strftime() */
 	if (setenv("TZ", ":/etc/localtime", 0) != 0)
 		error(1, errno, "setenv");
 
-	GDBusConnection *conn = dbus_system_connect();
-
-	struct my3status_pa_state pa_state = {0};
+	struct my3status_pa_state pa_state = { 0 };
 	my3status_pa_init(&pa_state);
+
+	struct my3status_upower_state upower_state = { 0 };
 
 	virConnectPtr libvirtConn = virConnectOpenReadOnly("qemu:///system");
 	if (libvirtConn == NULL) {
 		error(1, 0, "virConnectOpenReadOnly");
 	}
 
-	puts("{\"version\": 1}\n[\n[]");
+	puts("{\"version\": 1}\n"
+	     "[[]");
+
 	while (1) {
 		fputs(",[", stdout);
 		item_libvirt_domains(libvirtConn);
 		item_pulse_volume(&pa_state);
 		item_fs_usage();
 		item_sysinfo();
-		item_battery(conn);
+		item_upower(&upower_state);
 		item_datetime();
 		puts("]");
 
