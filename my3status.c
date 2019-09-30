@@ -252,7 +252,10 @@ int main() {
 		item_datetime();
 		puts("]");
 
-		fflush(stdout);
+		if (fflush(stdout) == EOF) {
+			error(1, errno, "fflush");
+		}
+
 		sleep(10);
 	}
 }
