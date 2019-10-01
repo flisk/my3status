@@ -1,116 +1,130 @@
 /* vim: set noet ts=8 sw=8: */
 #include <stdio.h>
+#include <string.h>
 #include <math.h>
-#include <pthread.h>
 #include "pulseaudio.h"
 
-static void pa_context_state_cb(pa_context*, void*);
-static void pa_context_success_cb(pa_context*, int, void*);
-static void pa_subscribe_cb(pa_context*, pa_subscription_event_type_t,
-			    uint32_t, void*);
-static void pa_server_info_cb(pa_context*, const pa_server_info*, void*);
-static void pa_sink_info_cb(pa_context*, const pa_sink_info*, int, void*);
+static void on_context_state_change(pa_context*, void*);
+static void on_subscribed(pa_context*, int, void*);
+static void on_state_change(pa_context*, pa_subscription_event_type_t, uint32_t,
+			    void*);
+static void on_server_info(pa_context*, const pa_server_info*, void*);
+static void on_sink_info(pa_context*, const pa_sink_info*, int, void*);
 
 
-int my3status_pa_init(struct my3status_pa_state *s) {
-	s->main_thread = pthread_self();
+int my3status_pulse_init(struct my3status_pulse_state *state) {
+	int r;
+	pa_mainloop_api *mainloop_api;
+	pa_threaded_mainloop *mainloop;
+	pa_context *context;
 
-	s->mainloop = pa_threaded_mainloop_new();
-	pa_threaded_mainloop_start(s->mainloop);
-
-	pa_mainloop_api *api = pa_threaded_mainloop_get_api(s->mainloop);
-	s->context = pa_context_new(api, "my3status");
-
-	pa_context_set_state_callback(s->context, pa_context_state_cb, NULL);
-	pa_context_set_subscribe_callback(s->context, pa_subscribe_cb, s);
-
-	pa_threaded_mainloop_lock(s->mainloop);
-	int r = pa_context_connect(s->context, NULL, PA_CONTEXT_NOFAIL, NULL);
-	pa_threaded_mainloop_unlock(s->mainloop);
-
-	if (-1 == r) {
-		fputs("pa_context_connect fucked up", stderr);
-		return -1;
+	r = pthread_mutex_init(&state->mutex, NULL);
+	if (r != 0) {
+		fprintf(stderr, "pthread_mutex_init returned %d: %s\n",
+			r, strerror(r));
 	}
 
-	return 0;
-}
+	state->main_thread = pthread_self();
 
-int my3status_pa_update(struct my3status_pa_state *s) {
-	pa_operation *o;
+	mainloop = pa_threaded_mainloop_new();
 
-	pa_threaded_mainloop_lock(s->mainloop);
-	o = pa_context_get_server_info(s->context, pa_server_info_cb, s);
-
-	if (o == NULL) {
-		pa_threaded_mainloop_unlock(s->mainloop);
-		return -1;
+	r = pa_threaded_mainloop_start(mainloop);
+	if (r < 0) {
+		fprintf(stderr, "pa_threaded_mainloop_start returned %d\n", r);
+		return 0;
 	}
 
-	pa_threaded_mainloop_wait(s->mainloop);
-	pa_operation_unref(o);
+	mainloop_api = pa_threaded_mainloop_get_api(mainloop);
 
-	pa_threaded_mainloop_accept(s->mainloop);
-	pa_threaded_mainloop_unlock(s->mainloop);
+	context = pa_context_new(mainloop_api, "my3status");
 
-	return 0;
+	pa_context_set_state_callback(context, on_context_state_change, state);
+	pa_context_set_subscribe_callback(context, on_state_change, state);
+
+	r = pa_context_connect(context, NULL, PA_CONTEXT_NOFAIL, NULL);
+	if (r < 0) {
+		fprintf(stderr, "pa_context_connect returned %d\n", r);
+		return 0;
+	}
+
+	return 1;
 }
 
-static void pa_context_state_cb(pa_context *c,
-				__attribute__((unused)) void *userdata) {
-	pa_context_state_t s = pa_context_get_state(c);
-
-	if (s != PA_CONTEXT_READY)
+static void on_context_state_change(pa_context *context, void *userdata) {
+	if (pa_context_get_state(context) != PA_CONTEXT_READY) {
 		return;
+	}
+
+	/* trigger initial update */
+	pa_context_get_server_info(context, on_server_info, userdata);
 
 	pa_subscription_mask_t sub_mask =
 		PA_SUBSCRIPTION_MASK_SERVER | PA_SUBSCRIPTION_MASK_SINK;
 
-	pa_context_subscribe(c, sub_mask, pa_context_success_cb, NULL);
+	pa_context_subscribe(context, sub_mask, on_subscribed, NULL);
 }
 
-static void pa_context_success_cb(__attribute__((unused)) pa_context *c,
-				  __attribute__((unused)) int success,
-				  __attribute__((unused)) void *userdata) {}
+static void on_subscribed(__attribute__((unused)) pa_context *context,
+			  __attribute__((unused)) int success,
+			  __attribute__((unused)) void *userdata)
+{
+}
 
-static void pa_subscribe_cb(__attribute__((unused)) pa_context *c,
-			    __attribute__((unused)) pa_subscription_event_type_t t,
-			    uint32_t i,
-			    void *userdata) {
-	if (i != 0)
+static void on_state_change(
+	pa_context *context,
+	__attribute__((unused)) pa_subscription_event_type_t event_type,
+	uint32_t i,
+	void *userdata
+) {
+	if (i != 0) {
 		return;
+	}
 
-	struct my3status_pa_state *s = userdata;
-	pthread_kill(s->main_thread, SIGUSR1);
+	pa_context_get_server_info(context, on_server_info, userdata);
 }
 
-static void pa_server_info_cb(pa_context *c,
-			      const pa_server_info *i,
-			      void *userdata) {
-	struct my3status_pa_state *s = userdata;
+static void on_server_info(
+	pa_context *context,
+	const pa_server_info *server_info,
+	void *userdata
+) {
+	pa_operation *operation;
 
-	pa_operation *o = pa_context_get_sink_info_by_name(
-							   c,
-							   i->default_sink_name,
-							   pa_sink_info_cb,
-							   s);
-	pa_operation_unref(o);
+	operation = pa_context_get_sink_info_by_name(
+		context,
+		server_info->default_sink_name,
+		on_sink_info,
+		userdata
+	);
+
+	pa_operation_unref(operation);
 }
 
-static void pa_sink_info_cb(__attribute__((unused)) pa_context *c,
-			    const pa_sink_info *i,
-			    int eol,
-			    void *userdata) {
-	if (1 == eol)
+static void on_sink_info(
+	__attribute__((unused)) pa_context *context,
+	const pa_sink_info *sink_info,
+	int eol,
+	void *userdata
+) {
+	struct my3status_pulse_state *state;
+	pa_volume_t volume_avg;
+	int volume_percent;
+
+	if (1 == eol) {
 		return;
+	}
 
-	struct my3status_pa_state *s = userdata;
+	state = userdata;
 
-	pa_volume_t avg = pa_cvolume_avg(&i->volume);
-	int percent = (int) round((double) avg * 100.0 / PA_VOLUME_NORM);
+	volume_avg = pa_cvolume_avg(&sink_info->volume);
+	volume_percent = (int) round((double) volume_avg * 100.0 / PA_VOLUME_NORM);
 
-	s->muted = i->mute;
-	s->volume = percent;
+	pthread_mutex_lock(&state->mutex);
 
-	pa_threaded_mainloop_signal(s->mainloop, 1);
+	state->muted = sink_info->mute;
+	state->volume = volume_percent;
+
+	pthread_mutex_unlock(&state->mutex);
+
+	pthread_kill(state->main_thread, SIGUSR1);
 }

@@ -121,9 +121,13 @@ static void item_fs_usage() {
 	I3BAR_ITEM("fs_usage", printf(UNICODE_FLOPPY " %.0f%%", used_percent));
 }
 
-static void item_pulse_volume(struct my3status_pa_state *pa_state) {
-	if (my3status_pa_update(pa_state) == -1)
-		return;
+static void item_pulse(struct my3status_pulse_state *state) {
+	pthread_mutex_lock(&state->mutex);
+
+	unsigned int muted = state->muted;
+	unsigned int volume = state->volume;
+
+	pthread_mutex_unlock(&state->mutex);
 
 	/*
 	 * Integer-dividing the volume by 34 gives an offset we can add to
@@ -133,13 +137,11 @@ static void item_pulse_volume(struct my3status_pa_state *pa_state) {
 	 *  34% -  66% → 1 (speaker medium volume)
 	 *  67% - 100% → 2 (speaker high volume)
 	 */
-	char icon[5] = {
-		0xf0, 0x9f, 0x94,
-		pa_state->muted ? 0x87 : 0x88 + MIN(pa_state->volume / 34, 2),
-		0
-	};
+	char fourth_byte = muted ? 0x87 : 0x88 + MIN(volume / 34, 2);
 
-	I3BAR_ITEM("volume_pulse", printf("%s %d%%", icon, pa_state->volume));
+	char icon[5] = { 0xf0, 0x9f, 0x94, fourth_byte, 0 };
+
+	I3BAR_ITEM("volume_pulse", printf("%s %d%%", icon, state->volume));
 }
 
 static void item_libvirt_domains(virConnectPtr conn) {
@@ -174,10 +176,10 @@ int main() {
 	if (setenv("TZ", ":/etc/localtime", 0) != 0)
 		error(1, errno, "setenv");
 
-	struct my3status_pa_state pa_state = { 0 };
-	my3status_pa_init(&pa_state);
-
+	struct my3status_pulse_state pulse_state = { 0 };
 	struct my3status_upower_state upower_state = { 0 };
+
+	my3status_pulse_init(&pulse_state);
 	my3status_upower_init(&upower_state);
 
 	virConnectPtr libvirtConn = virConnectOpenReadOnly("qemu:///system");
@@ -191,7 +193,7 @@ int main() {
 	while (1) {
 		fputs(",[", stdout);
 		item_libvirt_domains(libvirtConn);
-		item_pulse_volume(&pa_state);
+		item_pulse(&pulse_state);
 		item_fs_usage();
 		item_sysinfo();
 		item_upower(&upower_state);
