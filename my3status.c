@@ -36,17 +36,16 @@ static void item_datetime() {
 	if ((tm = localtime(&t)) == NULL)
 		error(1, errno, "localtime");
 
-	char clock[5] =
-		{
-		 0xf0,
-		 0x9f,
-		 0x95,
-		 tm->tm_hour == 0 ? 0x9b : 0x90 + (tm->tm_hour - 1) % 12,
-		 0
-		};
+	char fourth_byte =
+		tm->tm_hour == 0
+		? 0x9b
+		: 0x90 + (tm->tm_hour - 1) % 12;
 
-	if (strftime(timebuf, TIMEBUF_SIZE, "%a %-d %b %R", tm) == 0)
+	char clock[5] = { 0xf0, 0x9f, 0x95, fourth_byte, 0 };
+
+	if (strftime(timebuf, TIMEBUF_SIZE, "%a %-d %b %R", tm) == 0) {
 		error(1, errno, "strftime");
+	}
 
 	I3BAR_ITEM("datetime", printf("%s %s", clock, timebuf));
 }
@@ -137,7 +136,10 @@ static void item_pulse(struct my3status_pulse_state *state) {
 	 *  34% -  66% → 1 (speaker medium volume)
 	 *  67% - 100% → 2 (speaker high volume)
 	 */
-	char fourth_byte = muted ? 0x87 : 0x88 + MIN(volume / 34, 2);
+	char fourth_byte =
+		muted
+		? 0x87
+		: 0x88 + MIN(volume / 34, 2);
 
 	char icon[5] = { 0xf0, 0x9f, 0x94, fourth_byte, 0 };
 
