@@ -14,14 +14,18 @@ static void on_sink_info(pa_context*, const pa_sink_info*, int, void*);
 
 int my3status_pulse_init(struct my3status_pulse_state *state) {
 	int r;
-	pa_mainloop_api *mainloop_api;
 	pa_threaded_mainloop *mainloop;
+	pa_mainloop_api *mainloop_api;
 	pa_context *context;
 
 	r = pthread_mutex_init(&state->mutex, NULL);
 	if (r != 0) {
-		fprintf(stderr, "pthread_mutex_init returned %d: %s\n",
-			r, strerror(r));
+		fprintf(
+			stderr,
+			"pthread_mutex_init returned %d: %s\n",
+			r, strerror(r)
+		);
+		return 0;
 	}
 
 	state->main_thread = pthread_self();
@@ -41,7 +45,10 @@ int my3status_pulse_init(struct my3status_pulse_state *state) {
 	pa_context_set_state_callback(context, on_context_state_change, state);
 	pa_context_set_subscribe_callback(context, on_state_change, state);
 
+	pa_threaded_mainloop_lock(mainloop);
 	r = pa_context_connect(context, NULL, PA_CONTEXT_NOFAIL, NULL);
+	pa_threaded_mainloop_unlock(mainloop);
+
 	if (r < 0) {
 		fprintf(stderr, "pa_context_connect returned %d\n", r);
 		return 0;
