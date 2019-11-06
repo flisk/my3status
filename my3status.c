@@ -146,8 +146,32 @@ static void item_pulse(struct my3status_pulse_state *state) {
 	I3BAR_ITEM("volume_pulse", printf("%s %d%%", icon, state->volume));
 }
 
-static void item_libvirt_domains(virConnectPtr conn) {
-	int active_domains = virConnectNumOfDomains(conn);
+static void item_libvirt_domains(virConnectPtr *virtConn, int retry) {
+	if (*virtConn == NULL) {
+		*virtConn = virConnectOpenReadOnly("qemu:///system");
+
+		if (*virtConn != NULL) {
+			fprintf(stderr, "Connected to qemu:///system\n");
+		} else {
+			fprintf(stderr, "Failed to connect to qemu:///system\n");
+			return;
+		}
+	}
+
+	int active_domains = virConnectNumOfDomains(*virtConn);
+
+	if (active_domains == -1) {
+		fprintf(stderr, "Lost connection to qemu:///system\n");
+
+		virConnectClose(*virtConn);
+		*virtConn = NULL;
+
+		if (retry == 0) {
+			item_libvirt_domains(virtConn, 1);
+		}
+
+		return;
+	}
 
 	I3BAR_ITEM("libvirt_domains",
 		   printf("%s %d", UNICODE_PACKAGE, active_domains));
@@ -184,17 +208,14 @@ int main() {
 	my3status_pulse_init(&pulse_state);
 	my3status_upower_init(&upower_state);
 
-	virConnectPtr libvirtConn = virConnectOpenReadOnly("qemu:///system");
-	if (libvirtConn == NULL) {
-		error(1, 0, "virConnectOpenReadOnly");
-	}
+	virConnectPtr virtConn = NULL;
 
 	puts("{\"version\": 1}\n"
 	     "[[]");
 
 	while (1) {
 		fputs(",[", stdout);
-		item_libvirt_domains(libvirtConn);
+		item_libvirt_domains(&virtConn, 0);
 		item_pulse(&pulse_state);
 		item_fs_usage();
 		item_sysinfo();
