@@ -33,8 +33,9 @@ static void item_datetime() {
 	time_t t = time(NULL);
 	struct tm *tm;
 
-	if ((tm = localtime(&t)) == NULL)
+	if ((tm = localtime(&t)) == NULL) {
 		error(1, errno, "localtime");
+	}
 
 	char fourth_byte =
 		tm->tm_hour == 0
@@ -91,8 +92,9 @@ static void item_upower(struct my3status_upower_state *state) {
 static void item_sysinfo() {
 	struct sysinfo s;
 
-	if (sysinfo(&s) != 0)
+	if (sysinfo(&s) != 0) {
 		error(1, errno, "sysinfo");
+	}
 
 	float load_5min = s.loads[0] / (float) (1 << SI_LOAD_SHIFT);
 
@@ -110,8 +112,9 @@ static void item_sysinfo() {
 static void item_fs_usage() {
 	struct statfs s;
 
-	if (statfs("/", &s) != 0)
+	if (statfs("/", &s) != 0) {
 		error(1, errno, "statfs");
+	}
 
 	unsigned long total = s.f_blocks;
 	unsigned long used  = total - s.f_bfree;
@@ -199,8 +202,9 @@ int main() {
 
 	/* Stop glibc from running a superfluous stat() on each
 	   strftime() */
-	if (setenv("TZ", ":/etc/localtime", 0) != 0)
+	if (setenv("TZ", ":/etc/localtime", 0) != 0) {
 		error(1, errno, "setenv");
+	}
 
 	struct my3status_pulse_state pulse_state = { 0 };
 	struct my3status_upower_state upower_state = { 0 };
