@@ -80,13 +80,9 @@ static void on_subscribed(__attribute__((unused)) pa_context *context,
 static void on_state_change(
 	pa_context *context,
 	__attribute__((unused)) pa_subscription_event_type_t event_type,
-	uint32_t i,
+	__attribute__((unused)) uint32_t i,
 	void *userdata
 ) {
-	if (i != 0) {
-		return;
-	}
-
 	pa_context_get_server_info(context, on_server_info, userdata);
 }
 
