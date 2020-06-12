@@ -117,7 +117,7 @@ static void item_fs_usage() {
 	}
 
 	unsigned long total = s.f_blocks;
-	unsigned long used  = total - s.f_bfree;
+	unsigned long used  = total - s.f_bavail;
 	float used_percent  = (100.0f / total) * used;
 
 	I3BAR_ITEM("fs_usage", printf(UNICODE_FLOPPY " %.0f%%", used_percent));
