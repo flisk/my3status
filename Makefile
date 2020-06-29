@@ -1,7 +1,8 @@
 CFLAGS ?= -Wall \
           -Werror=format-security \
           -Werror=implicit-function-declaration \
-          -Wextra
+          -Wextra \
+	  -O2
 
 CFLAGS := $(CFLAGS) \
           `pkg-config --cflags --libs gio-2.0 libpulse libvirt` \
