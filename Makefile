@@ -7,8 +7,13 @@ CFLAGS := \
 	-Werror=implicit-function-declaration \
 	$(CFLAGS) \
 
+PREFIX ?= /usr/local
+
 my3status: my3status.c pulseaudio.c upower.c maildir.c
 
 install: my3status
-	install -D ./my3status $(DESTDIR)/usr/bin/my3status
+	install -D ./my3status $(DESTDIR)$(PREFIX)/bin/my3status
+
+uninstall:
+	rm $(DESTDIR)$(PREFIX)/bin/my3status
 

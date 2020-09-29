@@ -1,14 +1,13 @@
 with import <nixpkgs> {};
 
 stdenv.mkDerivation rec {
-  name = "my3status-${version}";
+  pname = "my3status";
   version = "git";
+
   src = ./.;
 
   nativeBuildInputs = [ pkgconfig ];
   buildInputs = [ pulseaudio glib ];
 
-  installPhase = ''
-	  install -D ./my3status $out/bin/my3status
-  '';
+  makeFlags = [ "DESTDIR=$(out) PREFIX=" ];
 }
