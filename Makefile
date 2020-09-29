@@ -7,7 +7,7 @@ CFLAGS := \
 	-Werror=implicit-function-declaration \
 	$(CFLAGS) \
 
-my3status: my3status.c pulseaudio.c upower.c
+my3status: my3status.c pulseaudio.c upower.c maildir.c
 
 install: my3status
 	install -D ./my3status $(DESTDIR)/usr/bin/my3status

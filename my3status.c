@@ -12,6 +12,7 @@
 #include <unistd.h>
 
 #include "pulseaudio.h"
+#include "maildir.h"
 
 #ifdef UPOWER
 #include "upower.h"
@@ -222,6 +223,7 @@ int main() {
 	struct my3status_pulse_state pulse_state = { 0 };
 
 	my3status_pulse_init(&pulse_state);
+	my3status_maildir_init();
 
 #ifdef UPOWER
 	struct my3status_upower_state upower_state = { 0 };
@@ -241,6 +243,8 @@ int main() {
 #ifdef LIBVIRT
 		item_libvirt_domains(&virtConn, 0);
 #endif
+
+		my3status_maildir_item();
 
 		item_pulse(&pulse_state);
 		item_sysinfo();
