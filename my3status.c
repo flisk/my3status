@@ -1,114 +1,90 @@
-/* vim: set noet ts=8 sw=8: */
+/* -*- indent-tabs-mode: t; -*- */
 #include <sys/sysinfo.h>
 #include <sys/vfs.h>
 #include <errno.h>
 #include <error.h>
+#include <pthread.h>
 #include <signal.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
 #include <unistd.h>
-#include <pthread.h>
-
-#include <libvirt/libvirt.h>
 
 #include "pulseaudio.h"
+
+#ifdef UPOWER
 #include "upower.h"
+#endif
 
-#define I3BAR_ITEM(name, full_text) \
-	printf("{\"name\":\"" name "\",\"full_text\":\""); \
-	full_text; \
-	printf("\"},")
+#ifdef LIBVIRT
+#include <libvirt/libvirt.h>
+#endif
 
-#define TIMEBUF_SIZE 32
-#define UNICODE_LINUX_BIRD "\xf0\x9f\x90\xa7"
-#define UNICODE_FLOPPY "\xf0\x9f\x92\xbe"
-#define UNICODE_PACKAGE "\xf0\x9f\x93\xa6"
+#define UNICODE_LINUX_BIRD	"\xf0\x9f\x90\xa7"
+#define UNICODE_FLOPPY		"\xf0\x9f\x92\xbe"
+#define UNICODE_PACKAGE		"\xf0\x9f\x93\xa6"
+#define UNICODE_BATTERY		"\xf0\x9f\x94\x8b"
 
-/*
- * Date and time with a time-sensitive clock icon
- */
-static void item_datetime() {
-	char timebuf[TIMEBUF_SIZE];
-	time_t t = time(NULL);
+void i3bar_item(const char *name, const char *format, ...)
+{
+	va_list args;
+	va_start(args, format);
+
+	printf("{'name':'%s','full_text':'", name);
+	vprintf(format, args);
+	printf("'},");
+
+	va_end(args);
+}
+
+static void item_datetime()
+{
 	struct tm *tm;
+	char timebuf[32];
+
+	time_t t = time(NULL);
 
 	if ((tm = localtime(&t)) == NULL) {
 		error(1, errno, "localtime");
 	}
 
-	char fourth_byte =
-		tm->tm_hour == 0
-		? 0x9b
-		: 0x90 + (tm->tm_hour - 1) % 12;
+	char clock[5] = { 0xf0, 0x9f, 0x95, 0, 0 };
 
-	char clock[5] = { 0xf0, 0x9f, 0x95, fourth_byte, 0 };
+	clock[3] = tm->tm_hour > 0
+		? 0x90 + (tm->tm_hour - 1) % 12
+		: 0x9b;
 
-	if (strftime(timebuf, TIMEBUF_SIZE, "%a %-d %b %R", tm) == 0) {
+	if (strftime(timebuf, 32, "%a %-d %b %R", tm) == 0) {
 		error(1, errno, "strftime");
 	}
 
-	I3BAR_ITEM("datetime", printf("%s %s", clock, timebuf));
+	i3bar_item("datetime", "%s %s", clock, timebuf);
 }
 
-static void item_upower_format_seconds(gint64 t, char *buf) {
-	gint64 minutes = t % 60;
-	gint64 hours = t / 60 / 60;
-
-	sprintf(buf, " %ld:%02ld", hours, minutes);
-}
-
-/*
- * Battery charge level and remaining time
- */
-static void item_upower(struct my3status_upower_state *state) {
-	char time_buf[32] = { 0 };
-	const char *indicator = "";
-
-	pthread_mutex_lock(&state->mutex);
-
-	gint64 time_to_empty = state->time_to_empty;
-	gint64 time_to_full = state->time_to_full;
-	gdouble percent = state->percent;
-
-	pthread_mutex_unlock(&state->mutex);
-
-	if (time_to_empty > 0) {
-		// Discharging
-		item_upower_format_seconds(time_to_empty, time_buf);
-	} else if (time_to_full > 0) {
-		// Charging
-		item_upower_format_seconds(time_to_full, time_buf);
-		indicator = "⚡";
-	}
-
-	I3BAR_ITEM("upower", printf("🔋%s %d%%%s",
-				    indicator, (int) percent, time_buf));
-}
-
-/*
- * System load (5 minute average) and concise uptime
- */
 static void item_sysinfo() {
-	struct sysinfo s;
+	struct sysinfo	si;
+	float		load_5min;
+	long		up_hours;
+	long		up_days;
 
-	if (sysinfo(&s) != 0) {
+	if (sysinfo(&si) != 0) {
 		error(1, errno, "sysinfo");
 	}
 
-	float load_5min = s.loads[0] / (float) (1 << SI_LOAD_SHIFT);
+	load_5min = si.loads[0] / (float) (1 << SI_LOAD_SHIFT);
 
-	long up_hours = s.uptime / 3600;
-	long up_days  = up_hours  / 24;
-	up_hours     -= up_days * 24;
+	up_hours  = si.uptime / 3600;
+	up_days	  = up_hours / 24;
+	up_hours -= up_days  * 24;
 
-	I3BAR_ITEM("sysinfo", printf(UNICODE_LINUX_BIRD " %.2f %ldd %ldh",
-				load_5min, up_days, up_hours));
+	i3bar_item(
+		"sysinfo",
+		UNICODE_LINUX_BIRD " %.2f %ldd %ldh",
+		load_5min, up_days, up_hours
+	);
 }
 
-/*
- * Percentage of used space on the filesystem
- */
 static void item_fs_usage() {
 	struct statfs s;
 
@@ -120,7 +96,7 @@ static void item_fs_usage() {
 	unsigned long used  = total - s.f_bavail;
 	float used_percent  = (100.0f / total) * used;
 
-	I3BAR_ITEM("fs_usage", printf(UNICODE_FLOPPY " %.0f%%", used_percent));
+	i3bar_item("fs_usage", UNICODE_FLOPPY " %.0f%%", used_percent);
 }
 
 static void item_pulse(struct my3status_pulse_state *state) {
@@ -146,9 +122,46 @@ static void item_pulse(struct my3status_pulse_state *state) {
 
 	char icon[5] = { 0xf0, 0x9f, 0x94, fourth_byte, 0 };
 
-	I3BAR_ITEM("volume_pulse", printf("%s %d%%", icon, state->volume));
+	i3bar_item("volume_pulse", "%s %d%%", icon, state->volume);
 }
 
+#ifdef UPOWER
+static void item_upower(struct my3status_upower_state *state)
+{
+	const char *indicator = "";
+	char timebuf[32] = { 0 };
+	int percent = -1;
+	gint64 time = -1;
+
+	pthread_mutex_lock(&state->mutex);
+
+	percent = (int) state->percent;
+
+	if (state->time_to_empty > 0) {
+		// Discharging
+		time = state->time_to_empty;
+	} else if (state->time_to_full > 0) {
+		// Charging
+		time = state->time_to_full;
+		indicator = "⚡";
+	}
+
+	pthread_mutex_unlock(&state->mutex);
+
+	if (time != -1) {
+		gint64 minutes = time % 60;
+		gint64 hours = time / 60 / 60;
+		sprintf(timebuf, " %ld:%02ld", hours, minutes);
+	}
+
+	i3bar_item(
+		"upower",
+		UNICODE_BATTERY "%s %d%%%s", indicator, percent, timebuf
+	);
+}
+#endif
+
+#ifdef LIBVIRT
 static void item_libvirt_domains(virConnectPtr *virtConn, int retry) {
 	if (*virtConn == NULL) {
 		*virtConn = virConnectOpenReadOnly("qemu:///system");
@@ -176,9 +189,9 @@ static void item_libvirt_domains(virConnectPtr *virtConn, int retry) {
 		return;
 	}
 
-	I3BAR_ITEM("libvirt_domains",
-		   printf("%s %d", UNICODE_PACKAGE, active_domains));
+	i3bar_item("libvirt_domains", UNICODE_PACKAGE " %d", active_domains);
 }
+#endif
 
 static void sleep_until_next_minute() {
 	time_t now = time(NULL);
@@ -207,24 +220,38 @@ int main() {
 	}
 
 	struct my3status_pulse_state pulse_state = { 0 };
-	struct my3status_upower_state upower_state = { 0 };
 
 	my3status_pulse_init(&pulse_state);
-	my3status_upower_init(&upower_state);
 
+#ifdef UPOWER
+	struct my3status_upower_state upower_state = { 0 };
+        my3status_upower_init(&upower_state);
+#endif
+
+#ifdef LIBVIRT
 	virConnectPtr virtConn = NULL;
+#endif
 
 	puts("{\"version\": 1}\n"
 	     "[[]");
 
 	while (1) {
 		fputs(",[", stdout);
+
+#ifdef LIBVIRT
 		item_libvirt_domains(&virtConn, 0);
+#endif
+
 		item_pulse(&pulse_state);
-		item_fs_usage();
 		item_sysinfo();
-		item_upower(&upower_state);
-		item_datetime();
+		item_fs_usage();
+
+#ifdef UPOWER
+                item_upower(&upower_state);
+#endif
+
+                item_datetime();
+
 		puts("]");
 
 		if (fflush(stdout) == EOF) {
