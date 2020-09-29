@@ -1,1 +1,5 @@
+# Makefile output
 my3status
+
+# nix-build output
+result
