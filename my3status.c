@@ -13,6 +13,7 @@
 
 #include "pulseaudio.h"
 #include "maildir.h"
+#include "meds.h"
 
 #ifdef UPOWER
 #include "upower.h"
@@ -239,6 +240,8 @@ int main() {
 
 	while (1) {
 		fputs(",[", stdout);
+
+		my3status_meds_item("/home/tobias/Nextcloud/meds.sqlite", "ritalin");
 
 #ifdef LIBVIRT
 		item_libvirt_domains(&virtConn, 0);
