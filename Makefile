@@ -9,6 +9,11 @@ override CFLAGS := \
 
 PREFIX ?= /usr/local
 
+all: my3status
+
+clean:
+	rm my3status
+
 my3status: my3status.c pulseaudio.c upower.c maildir.c meds.c
 
 install: my3status
