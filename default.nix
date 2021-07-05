@@ -7,7 +7,7 @@ stdenv.mkDerivation rec {
   src = ./.;
 
   nativeBuildInputs = [ pkgconfig ];
-  buildInputs = [ pulseaudio glib sqlite ];
+  buildInputs = [ pulseaudio glib.dev sqlite ];
 
-  makeFlags = [ "DESTDIR=$(out) PREFIX=" ];
+  makeFlags = [ "DESTDIR=$(out) PREFIX= CFLAGS=-DUPOWER=1" ];
 }

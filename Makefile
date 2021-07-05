@@ -1,5 +1,5 @@
-CFLAGS := \
-	`pkg-config --cflags --libs gio-2.0 libpulse sqlite3` \
+override CFLAGS := \
+	`pkg-config --cflags --libs glib-2.0 gio-unix-2.0 libpulse sqlite3` \
 	-lm -lpthread \
 	-Wall \
 	-Wextra \
