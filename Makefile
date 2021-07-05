@@ -15,10 +15,10 @@ clean:
 	rm my3status
 
 my3status: my3status.c pulseaudio.c upower.c maildir.c meds.c
+	$(CC) $^ -o $@ $(CFLAGS)
 
 install: my3status
 	install -D ./my3status $(DESTDIR)$(PREFIX)/bin/my3status
 
 uninstall:
 	rm $(DESTDIR)$(PREFIX)/bin/my3status
-
