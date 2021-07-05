@@ -97,7 +97,7 @@ static void count_new(const char *path, int *num_new, int *num_errors)
         }
 }
 
-void my3status_maildir_item()
+void my3status_maildir_item(int last)
 {
         int num_new = 0;
         int num_errors = 0;
@@ -116,7 +116,7 @@ void my3status_maildir_item()
                 error_indicator = " (!)";
         }
 
-        i3bar_item("maildir", "%s %d%s", emoji, num_new, error_indicator);
+        i3bar_item(last, "maildir", "%s %d%s", emoji, num_new, error_indicator);
 }
 
 void my3status_maildir_init()

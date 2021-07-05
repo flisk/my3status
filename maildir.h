@@ -1,2 +1,2 @@
 void my3status_maildir_init();
-void my3status_maildir_item();
+void my3status_maildir_item(int);

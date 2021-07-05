@@ -1,1 +1,1 @@
-void i3bar_item(const char *, const char *, ...);
+void i3bar_item(int, const char *, const char *, ...);

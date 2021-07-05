@@ -18,7 +18,7 @@ const char *LATEST_RECORD_QUERY =
 	"ORDER BY \"when\" DESC "
 	"LIMIT 1";
 
-void my3status_meds_item(const char *db_file, const char *which) {
+void my3status_meds_item(int last, const char *db_file, const char *which) {
 	sqlite3 *db;
 	int r;
 
@@ -54,7 +54,6 @@ void my3status_meds_item(const char *db_file, const char *which) {
 		goto fail;
 	}
 
-
 	time_t now = time(NULL);
 	time_t when = (time_t) sqlite3_column_int64(stmt, 0);
 
@@ -71,11 +70,11 @@ void my3status_meds_item(const char *db_file, const char *which) {
 		days    = seconds / 86400;
 
 	if (days > 0) {
-		i3bar_item("meds", PILL_EMOJI " %ldd", days);
+		i3bar_item(last, "meds", PILL_EMOJI " %ldd", days);
 	} else if (hours > 0 || minutes > 0) {
-		i3bar_item("meds", PILL_EMOJI " %01ld:%02ld", hours, minutes);
+		i3bar_item(last, "meds", PILL_EMOJI " %01ld:%02ld", hours, minutes);
 	} else {
-		i3bar_item("meds", PILL_EMOJI " :3");
+		i3bar_item(last, "meds", PILL_EMOJI " :3");
 	}
 
 	sqlite3_close(db);
@@ -83,5 +82,5 @@ void my3status_meds_item(const char *db_file, const char *which) {
 
 fail:
 	sqlite3_close(db);
-	i3bar_item("meds", PILL_EMOJI " !");
+	i3bar_item(last, "meds", PILL_EMOJI " !");
 }

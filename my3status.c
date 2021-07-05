@@ -19,38 +19,38 @@
 #include "upower.h"
 #endif
 
-#ifdef LIBVIRT
-#include <libvirt/libvirt.h>
-#endif
-
 #define UNICODE_LINUX_BIRD	"\xf0\x9f\x90\xa7"
 #define UNICODE_FLOPPY		"\xf0\x9f\x92\xbe"
 #define UNICODE_PACKAGE		"\xf0\x9f\x93\xa6"
 #define UNICODE_BATTERY		"\xf0\x9f\x94\x8b"
 
-void i3bar_item(const char *name, const char *format, ...)
+#define ITEM_TEXT_BUFSIZE 64
+
+void i3bar_item(int last, const char *name, const char *format, ...)
 {
+	/* Micro-optimization: statically allocated arrays are a bit faster */
+	static char item_text[ITEM_TEXT_BUFSIZE];
+
+	const char *end = last == 1 ? "" : ",";
+
 	va_list args;
 	va_start(args, format);
-
-	printf("{'name':'%s','full_text':'", name);
-	vprintf(format, args);
-	printf("'},");
-
+	vsnprintf(item_text, ITEM_TEXT_BUFSIZE, format, args);
 	va_end(args);
+
+	printf("{\"name\":\"%s\",\"full_text\":\"%s\"}%s", name, item_text, end);
 }
 
-static void item_datetime()
+static void item_datetime(int last)
 {
-	struct tm *tm;
-	char timebuf[32];
-
 	time_t t = time(NULL);
+	struct tm *tm = localtime(&t);
 
-	if ((tm = localtime(&t)) == NULL) {
-		error(1, errno, "localtime");
+	if (tm == NULL) {
+		error(1, errno, "localtime failed");
 	}
 
+	char timebuf[32];
 	char clock[5] = { 0xf0, 0x9f, 0x95, 0, 0 };
 
 	clock[3] = tm->tm_hour > 0
@@ -61,10 +61,11 @@ static void item_datetime()
 		error(1, errno, "strftime");
 	}
 
-	i3bar_item("datetime", "%s %s", clock, timebuf);
+	i3bar_item(last, "datetime", "%s %s", clock, timebuf);
 }
 
-static void item_sysinfo() {
+static void item_sysinfo(int last)
+{
 	struct sysinfo	si;
 	float		load_5min;
 	long		up_hours;
@@ -81,13 +82,15 @@ static void item_sysinfo() {
 	up_hours -= up_days  * 24;
 
 	i3bar_item(
+		last,
 		"sysinfo",
 		UNICODE_LINUX_BIRD " %.2f %ldd %ldh",
 		load_5min, up_days, up_hours
 	);
 }
 
-static void item_fs_usage() {
+static void item_fs_usage(int last)
+{
 	struct statfs s;
 
 	if (statfs("/", &s) != 0) {
@@ -98,10 +101,11 @@ static void item_fs_usage() {
 	unsigned long used  = total - s.f_bavail;
 	float used_percent  = (100.0f / total) * used;
 
-	i3bar_item("fs_usage", UNICODE_FLOPPY " %.0f%%", used_percent);
+	i3bar_item(last, "fs_usage", UNICODE_FLOPPY " %.0f%%", used_percent);
 }
 
-static void item_pulse(struct my3status_pulse_state *state) {
+static void item_pulse(int last, struct my3status_pulse_state *state)
+{
 	pthread_mutex_lock(&state->mutex);
 
 	unsigned int muted = state->muted;
@@ -124,11 +128,11 @@ static void item_pulse(struct my3status_pulse_state *state) {
 
 	char icon[5] = { 0xf0, 0x9f, 0x94, fourth_byte, 0 };
 
-	i3bar_item("volume_pulse", "%s %d%%", icon, state->volume);
+	i3bar_item(last, "volume_pulse", "%s %d%%", icon, state->volume);
 }
 
 #ifdef UPOWER
-static void item_upower(struct my3status_upower_state *state)
+static void item_upower(int last, struct my3status_upower_state *state)
 {
 	const char *indicator = "";
 	char timebuf[32] = { 0 };
@@ -157,60 +161,54 @@ static void item_upower(struct my3status_upower_state *state)
 	}
 
 	i3bar_item(
+		last,
 		"upower",
 		UNICODE_BATTERY "%s %d%%%s", indicator, percent, timebuf
 	);
 }
 #endif
 
-#ifdef LIBVIRT
-static void item_libvirt_domains(virConnectPtr *virtConn, int retry) {
-	if (*virtConn == NULL) {
-		*virtConn = virConnectOpenReadOnly("qemu:///system");
-
-		if (*virtConn != NULL) {
-			fprintf(stderr, "Connected to qemu:///system\n");
-		} else {
-			fprintf(stderr, "Failed to connect to qemu:///system\n");
-			return;
-		}
-	}
-
-	int active_domains = virConnectNumOfDomains(*virtConn);
-
-	if (active_domains == -1) {
-		fprintf(stderr, "Lost connection to qemu:///system\n");
-
-		virConnectClose(*virtConn);
-		*virtConn = NULL;
-
-		if (retry == 0) {
-			item_libvirt_domains(virtConn, 1);
-		}
-
-		return;
-	}
-
-	i3bar_item("libvirt_domains", UNICODE_PACKAGE " %d", active_domains);
-}
-#endif
-
-static void sleep_until_next_minute() {
+static void sleep_until_next_minute()
+{
+	/*
+	 * Micro-optimization: unix timestamp mod 60 is a lot faster for determining
+	 * seconds in the current minute vs. letting localtime do its whole song and
+	 * dance.
+	 */
 	time_t now = time(NULL);
-	struct tm *tm = localtime(&now);
+	int seconds_in_minute = now % 60;
 
-	/* The extra second means our displayed time will always drag
-	   by one second, but it (hopefully) won't miss minute changes
-	   during leap seconds. */
-	int remaining_seconds = 61 - tm->tm_sec;
-
-	sleep(remaining_seconds);
+	/*
+	 * Let's talk about leap seconds.
+	 *
+	 * The time_t we acquired above is a traditional Unix timestamp, meaning an
+	 * integer representing the seconds that have passed since 1970-01-01 00:00
+	 * UTC. This value is specifically defined to increase by exactly 86400
+	 * every day.
+	 *
+	 * This definition leaves no room for leap seconds, so they simply do not
+	 * exist on Unix systems. Instead, the system clock is slowed down to
+	 * accommodate actual time, meaning during a leap second, tm_sec is going to
+	 * remain stuck at 59 for two seconds.
+	 *
+	 * Which means: if we sleep for 60 - tm_sec seconds until the next update,
+	 * we'll get the correct time MOST of the time, but if there's a leap second
+	 * occurring, we'll miss the minute change.
+	 *
+	 * Is this worth handling? Probably not. But there's a really easy hack we
+	 * can do to "fix" this: sleep for an extra second. This means our displayed
+	 * time will always drag by a second, but minute changes during leap seconds
+	 * won't be missed.
+	 */
+	sleep(61 - seconds_in_minute);
 }
 
-static void on_signal(__attribute__((unused)) int signum) {
+static void on_signal(__attribute__((unused)) int signum)
+{
 }
 
-int main() {
+int main()
+{
 	/* No-op signal handler because SIGUSR1 won't interrupt
 	   sleep() with signal(SIGUSR1, SIG_IGN) */
 	signal(SIGUSR1, on_signal);
@@ -224,42 +222,48 @@ int main() {
 	struct my3status_pulse_state pulse_state = { 0 };
 
 	my3status_pulse_init(&pulse_state);
-	my3status_maildir_init();
+	//my3status_maildir_init();
 
 #ifdef UPOWER
 	struct my3status_upower_state upower_state = { 0 };
         my3status_upower_init(&upower_state);
 #endif
 
-#ifdef LIBVIRT
-	virConnectPtr virtConn = NULL;
-#endif
+	printf(
+		"{\"version\":1}\n"
+		"["
+		"[{\"name\":\"placeholder\",\"full_text\":\"…\"}],"
+	);
 
-	puts("{\"version\": 1}\n"
-	     "[[]");
+	sleep(3);
+
+	struct tm *tm;
+	time_t time_now;
 
 	while (1) {
-		fputs(",[", stdout);
+		time_now = time(NULL);
 
-		my3status_meds_item("/home/tobias/Nextcloud/meds.sqlite", "ritalin");
+		if ((tm = localtime(&time_now)) == NULL) {
+			error(1, errno, "localtime");
+		}
 
-#ifdef LIBVIRT
-		item_libvirt_domains(&virtConn, 0);
-#endif
+		fputs("[", stdout);
 
-		my3status_maildir_item();
+		my3status_meds_item(0, "/home/tobias/Nextcloud/meds.sqlite", "ritalin");
 
-		item_pulse(&pulse_state);
-		item_sysinfo();
-		item_fs_usage();
+		//my3status_maildir_item(0);
+
+		item_pulse(0, &pulse_state);
+		item_sysinfo(0);
+		item_fs_usage(0);
 
 #ifdef UPOWER
-                item_upower(&upower_state);
+		item_upower(0, &upower_state);
 #endif
 
-                item_datetime();
+		item_datetime(1);
 
-		puts("]");
+		fputs("],", stdout);
 
 		if (fflush(stdout) == EOF) {
 			error(1, errno, "fflush");
