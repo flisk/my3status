@@ -1,4 +1,4 @@
-/* -*- indent-tabs-mode: t; -*- */
+// vim: noexpandtab tabstop=8 shiftwidth=8
 #include <sys/sysinfo.h>
 #include <sys/vfs.h>
 #include <errno.h>
