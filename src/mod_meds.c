@@ -86,15 +86,30 @@ static void *run(__attribute__((unused)) void *arg)
 
 static time_t update_output(sqlite3 *db, sqlite3_stmt *latest_record_stmt)
 {
+	static uint64_t previous_minutes = -1;
+	static uint64_t previous_hours = -1;
+	static uint64_t previous_days = -1;
+
 	int r;
+
 	r = sqlite3_bind_text(latest_record_stmt, 1, STUPID_HARDCODED_PILL_TYPE, -1, SQLITE_STATIC);
 	if (r != SQLITE_OK) {
 		error(1, 0, "can't bind parameter: %d, %s", r, sqlite3_errmsg(db));
 	}
 
+retry:
 	r = sqlite3_step(latest_record_stmt);
-	if (r != SQLITE_ROW) {
-		error(1, 0, "can't execute statement: %s", sqlite3_errmsg(db));
+	switch (r) {
+	case SQLITE_ROW:
+		break;
+
+	case SQLITE_BUSY:
+		fprintf(stderr, "meds db is locked, retrying in 10 ms\n");
+		usleep(10 * 1000);
+		goto retry;
+	
+	default:
+		error(1, 0, "can't execute statement: %d, %s", r, sqlite3_errmsg(db));
 	}
 
 	sqlite_int64 time_value = sqlite3_column_int64(latest_record_stmt, 0);
@@ -111,6 +126,13 @@ static time_t update_output(sqlite3 *db, sqlite3_stmt *latest_record_stmt)
 	uint64_t hours		= (seconds % 86400) / 3600;
 	uint64_t days		= seconds / 86400;
 
+	if (previous_minutes == minutes &&
+	    previous_hours == hours &&
+	    previous_days == days)
+	{
+		goto no_output_update;
+	}
+
 	pthread_mutex_lock(&mod.output_mutex);
 
 	if (days > 0) {
@@ -121,6 +143,11 @@ static time_t update_output(sqlite3 *db, sqlite3_stmt *latest_record_stmt)
 
 	pthread_mutex_unlock(&mod.output_mutex);
 	my3status_update(&mod);
+
+no_output_update:
+	previous_minutes = minutes;
+	previous_hours = hours;
+	previous_days = days;
 
 	uint32_t sleep_for =
 		days > 0
@@ -155,7 +182,7 @@ static int db_init_watch()
 	int flags = fcntl(fd, F_GETFL, 0);
 	fcntl(fd, F_SETFL, flags | O_NONBLOCK);
 
-	uint32_t watch_mask = IN_CLOSE_WRITE | IN_MODIFY;
+	uint32_t watch_mask = IN_MODIFY;
 	int r = inotify_add_watch(fd, STUPID_HARDCODED_DB_PATH, watch_mask);
 
 	if (r == -1) {
