@@ -1,6 +1,8 @@
+#include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 #include <math.h>
+#include <pthread.h>
 #include "pulseaudio.h"
 
 static void on_context_state_change(pa_context*, void*);
@@ -10,12 +12,9 @@ static void on_state_change(pa_context*, pa_subscription_event_type_t, uint32_t,
 static void on_server_info(pa_context*, const pa_server_info*, void*);
 static void on_sink_info(pa_context*, const pa_sink_info*, int, void*);
 
-
-int my3status_pulse_init(struct my3status_pulse_state *state) {
+int my3status_pulse_init(struct my3status_pulse_state *state)
+{
 	int r;
-	pa_threaded_mainloop *mainloop;
-	pa_mainloop_api *mainloop_api;
-	pa_context *context;
 
 	r = pthread_mutex_init(&state->mutex, NULL);
 	if (r != 0) {
@@ -29,17 +28,16 @@ int my3status_pulse_init(struct my3status_pulse_state *state) {
 
 	state->main_thread = pthread_self();
 
-	mainloop = pa_threaded_mainloop_new();
-
+	pa_threaded_mainloop *mainloop = pa_threaded_mainloop_new();
 	r = pa_threaded_mainloop_start(mainloop);
+
 	if (r < 0) {
 		fprintf(stderr, "pa_threaded_mainloop_start returned %d\n", r);
 		return 0;
 	}
 
-	mainloop_api = pa_threaded_mainloop_get_api(mainloop);
-
-	context = pa_context_new(mainloop_api, "my3status");
+	pa_mainloop_api *mainloop_api = pa_threaded_mainloop_get_api(mainloop);
+	pa_context *context = pa_context_new(mainloop_api, "my3status");
 
 	pa_context_set_state_callback(context, on_context_state_change, state);
 	pa_context_set_subscribe_callback(context, on_state_change, state);
@@ -70,11 +68,11 @@ static void on_context_state_change(pa_context *context, void *userdata) {
 	pa_context_subscribe(context, sub_mask, on_subscribed, NULL);
 }
 
-static void on_subscribed(__attribute__((unused)) pa_context *context,
-			  __attribute__((unused)) int success,
-			  __attribute__((unused)) void *userdata)
-{
-}
+static void on_subscribed(
+	__attribute__((unused)) pa_context *context,
+	__attribute__((unused)) int success,
+	__attribute__((unused)) void *userdata
+) {}
 
 static void on_state_change(
 	pa_context *context,
@@ -90,16 +88,13 @@ static void on_server_info(
 	const pa_server_info *server_info,
 	void *userdata
 ) {
-	pa_operation *operation;
-
-	operation = pa_context_get_sink_info_by_name(
+	pa_operation *o = pa_context_get_sink_info_by_name(
 		context,
 		server_info->default_sink_name,
 		on_sink_info,
 		userdata
 	);
-
-	pa_operation_unref(operation);
+	pa_operation_unref(o);
 }
 
 static void on_sink_info(
@@ -108,18 +103,14 @@ static void on_sink_info(
 	int eol,
 	void *userdata
 ) {
-	struct my3status_pulse_state *state;
-	pa_volume_t volume_avg;
-	int volume_percent;
-
 	if (1 == eol) {
 		return;
 	}
 
-	state = userdata;
+	struct my3status_pulse_state *state = userdata;
 
-	volume_avg = pa_cvolume_avg(&sink_info->volume);
-	volume_percent = (int) round((double) volume_avg * 100.0 / PA_VOLUME_NORM);
+	pa_volume_t volume_avg = pa_cvolume_avg(&sink_info->volume);
+	int volume_percent = (int) round((double) volume_avg * 100.0 / PA_VOLUME_NORM);
 
 	pthread_mutex_lock(&state->mutex);
 

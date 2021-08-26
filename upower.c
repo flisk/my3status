@@ -2,25 +2,25 @@
 #include <string.h>
 #include "upower.h"
 
-static int display_device_property(GDBusConnection *conn,
-				   const gchar *property_name,
-				   GVariant **variant)
-{
-	GError *g_error;
-	GVariant *g_result;
+static int display_device_property(
+	GDBusConnection *conn,
+	const gchar *property_name,
+	GVariant **variant
+) {
+	GVariant *parameters = g_variant_new(
+		"(ss)",
+		"org.freedesktop.UPower.Device",
+		property_name
+	);
 
-	g_error = NULL;
-	g_result = g_dbus_connection_call_sync(
+	GError *g_error = NULL;
+	GVariant *g_result = g_dbus_connection_call_sync(
 		conn,
 		"org.freedesktop.UPower",
 		"/org/freedesktop/UPower/devices/DisplayDevice",
 		"org.freedesktop.DBus.Properties",
 		"Get",
-		g_variant_new(
-			"(ss)",
-			"org.freedesktop.UPower.Device",
-			property_name
-		),
+		parameters,
 		NULL,
 		G_DBUS_CALL_FLAGS_NONE,
 		-1,
@@ -57,14 +57,15 @@ static int device_percentage(GDBusConnection *conn, gdouble *percent) {
 	return 1;
 }
 
-static void properties_changed(GDBusConnection *conn,
-			       __attribute__((unused)) const gchar *sender_name,
-			       __attribute__((unused)) const gchar *object_path,
-			       __attribute__((unused)) const gchar *interface_name,
-			       __attribute__((unused)) const gchar *signal_name,
-			       GVariant *parameters,
-			       gpointer user_data)
-{
+static void properties_changed(
+	GDBusConnection *conn,
+	__attribute__((unused)) const gchar *sender_name,
+	__attribute__((unused)) const gchar *object_path,
+	__attribute__((unused)) const gchar *interface_name,
+	__attribute__((unused)) const gchar *signal_name,
+	GVariant *parameters,
+	gpointer user_data
+) {
 	struct my3status_upower_state *state = user_data;
 
 	gdouble percent = -1.0;
@@ -109,9 +110,10 @@ static void properties_changed(GDBusConnection *conn,
 	pthread_kill(state->main_thread, SIGUSR1);
 }
 
-static void initialize_state(GDBusConnection *conn,
-			     struct my3status_upower_state *state)
-{
+static void initialize_state(
+	GDBusConnection *conn,
+	struct my3status_upower_state *state
+) {
 	GVariant *time_to_full;
 	GVariant *time_to_empty;
 

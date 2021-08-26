@@ -27,10 +27,9 @@
 
 void i3bar_item(int last, const char *name, const char *format, ...)
 {
-	/* Micro-optimization: statically allocated arrays are a bit faster */
 	static char item_text[ITEM_TEXT_BUFSIZE];
 
-	const char *end = last == 1 ? "" : ",";
+	const char *end = (last == 1 ? "" : ",");
 
 	va_list args;
 	va_start(args, format);
@@ -42,6 +41,9 @@ void i3bar_item(int last, const char *name, const char *format, ...)
 
 static void item_datetime(int last)
 {
+	static char timebuf[32];
+	static char clock_glyph[5] = { 0xf0, 0x9f, 0x95, 0, 0 };
+
 	time_t t = time(NULL);
 	struct tm *tm = localtime(&t);
 
@@ -49,10 +51,8 @@ static void item_datetime(int last)
 		error(1, errno, "localtime failed");
 	}
 
-	char timebuf[32];
-	char clock[5] = { 0xf0, 0x9f, 0x95, 0, 0 };
-
-	clock[3] = tm->tm_hour > 0
+	clock_glyph[3] =
+		tm->tm_hour > 0
 		? 0x90 + (tm->tm_hour - 1) % 12
 		: 0x9b;
 
@@ -60,23 +60,24 @@ static void item_datetime(int last)
 		error(1, errno, "strftime");
 	}
 
-	i3bar_item(last, "datetime", "%s %s", clock, timebuf);
+	i3bar_item(last, "datetime", "%s %s", clock_glyph, timebuf);
 }
 
 static void item_sysinfo(int last)
 {
-	struct sysinfo	si;
-	float		load_5min;
-	long		up_hours;
-	long		up_days;
+	static struct sysinfo s;
 
-	if (sysinfo(&si) != 0) {
+	float	load_5min;
+	long	up_hours;
+	long	up_days;
+
+	if (sysinfo(&s) != 0) {
 		error(1, errno, "sysinfo");
 	}
 
-	load_5min = si.loads[0] / (float) (1 << SI_LOAD_SHIFT);
+	load_5min = s.loads[0] / (float) (1 << SI_LOAD_SHIFT);
 
-	up_hours  = si.uptime / 3600;
+	up_hours  = s.uptime / 3600;
 	up_days	  = up_hours / 24;
 	up_hours -= up_days  * 24;
 
@@ -90,7 +91,7 @@ static void item_sysinfo(int last)
 
 static void item_fs_usage(int last)
 {
-	struct statfs s;
+	static struct statfs s;
 
 	if (statfs("/", &s) != 0) {
 		error(1, errno, "statfs");
@@ -105,6 +106,8 @@ static void item_fs_usage(int last)
 
 static void item_pulse(int last, struct my3status_pulse_state *state)
 {
+	static char volume_glyph[5] = { 0xf0, 0x9f, 0x94, 0, 0 };
+
 	pthread_mutex_lock(&state->mutex);
 
 	unsigned int muted = state->muted;
@@ -113,28 +116,27 @@ static void item_pulse(int last, struct my3status_pulse_state *state)
 	pthread_mutex_unlock(&state->mutex);
 
 	/*
-	 * Integer-dividing the volume by 34 gives an offset we can add to
-	 * 0x88, producing the appropriate speaker volume emojis:
-	 *
-	 *   0% -  33% → 0 (speaker low volume)
-	 *  34% -  66% → 1 (speaker medium volume)
-	 *  67% - 100% → 2 (speaker high volume)
-	 */
-	char fourth_byte =
+	* Integer-dividing the volume by 34 gives an offset we can add to
+	* 0x88, producing the appropriate speaker volume emojis:
+	*
+	*   0% -  33% → 0 (speaker low volume)
+	*  34% -  66% → 1 (speaker medium volume)
+	*  67% - 100% → 2 (speaker high volume)
+	*/
+	volume_glyph[3] =
 		muted
 		? 0x87
 		: 0x88 + MIN(volume / 34, 2);
 
-	char icon[5] = { 0xf0, 0x9f, 0x94, fourth_byte, 0 };
-
-	i3bar_item(last, "volume_pulse", "%s %d%%", icon, state->volume);
+	i3bar_item(last, "volume_pulse", "%s %d%%", volume_glyph, state->volume);
 }
 
 #ifdef UPOWER
 static void item_upower(int last, struct my3status_upower_state *state)
 {
+	static char timebuf[32] = { 0 };
+
 	const char *indicator = "";
-	char timebuf[32] = { 0 };
 	int percent = -1;
 	gint64 time = -1;
 

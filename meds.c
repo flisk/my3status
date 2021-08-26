@@ -62,11 +62,10 @@ void my3status_meds_item(int last, const char *db_file, const char *which) {
 		goto fail;
 	}
 
-        unsigned long
-		seconds = now - when,
-		minutes = (seconds % 3600) / 60,
-		hours   = (seconds % 86400) / 3600,
-		days    = seconds / 86400;
+        unsigned long seconds = now - when;
+	unsigned long minutes = (seconds % 3600) / 60;
+	unsigned long hours   = (seconds % 86400) / 3600;
+	unsigned long days    = seconds / 86400;
 
 	if (days > 0) {
 		i3bar_item(last, "meds", PILL_EMOJI " %ldd", days);
@@ -78,7 +77,6 @@ void my3status_meds_item(int last, const char *db_file, const char *which) {
 
 	sqlite3_close(db);
 	return;
-
 fail:
 	sqlite3_close(db);
 	i3bar_item(last, "meds", PILL_EMOJI " !");

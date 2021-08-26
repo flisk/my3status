@@ -5,6 +5,7 @@ override CFLAGS := \
 	-Wextra \
 	-Werror=format-security \
 	-Werror=implicit-function-declaration \
+	-O2 \
 	$(CFLAGS)
 
 PREFIX ?= /usr/local
