@@ -1,5 +1,7 @@
 # my3status
 
+<img src="screenshot.png" alt="Example screenshot">
+
 This is a relatively modest C program that serves as my [i3](https://i3wm.org/)
 status line generator, written for fun and C practice. It supports:
 
