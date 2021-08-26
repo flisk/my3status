@@ -1,4 +1,3 @@
-/* vim: set noet ts=8 sw=8: */
 #include <stdio.h>
 #include <string.h>
 #include <math.h>

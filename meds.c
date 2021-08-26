@@ -1,4 +1,3 @@
-/* -*- indent-tabs-mode: t; -*- */
 #include <sqlite3.h>
 #include <stdio.h>
 #include <time.h>

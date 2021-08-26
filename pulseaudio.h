@@ -1,4 +1,3 @@
-/* vim: set noet ts=8 sw=8: */
 #include <pthread.h>
 #include <pulse/pulseaudio.h>
 

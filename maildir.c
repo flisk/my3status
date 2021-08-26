@@ -1,4 +1,3 @@
-/* vim: set noet ts=8 sw=8: -*- indent-tabs-mode: t; -*- */
 #include <sys/inotify.h>
 #include <sys/types.h>
 #include <dirent.h>
