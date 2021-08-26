@@ -1,5 +1,5 @@
 override CFLAGS := \
-	`pkg-config --cflags --libs glib-2.0 gio-unix-2.0 libpulse sqlite3` \
+	`pkg-config --cflags --libs libpulse sqlite3` \
 	-lm -lpthread \
 	-Wall \
 	-Wextra \
@@ -10,16 +10,18 @@ override CFLAGS := \
 
 PREFIX ?= /usr/local
 
-all: my3status
+SOURCES = $(wildcard src/*.c)
+
+all: bin/my3status
 
 clean:
-	rm my3status
+	rm bin/my3status
 
-my3status: my3status.c pulseaudio.c upower.c maildir.c meds.c
+bin/my3status: $(SOURCES)
 	$(CC) $^ -o $@ $(CFLAGS)
 
-install: my3status
-	install -D ./my3status $(DESTDIR)$(PREFIX)/bin/my3status
+install: bin/my3status
+	install -D ./bin/my3status $(DESTDIR)$(PREFIX)/bin/my3status
 
 uninstall:
 	rm $(DESTDIR)$(PREFIX)/bin/my3status
