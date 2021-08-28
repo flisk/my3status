@@ -45,10 +45,12 @@ int main(int argc, char **argv)
 			module_end = (n->next == NULL ? "" : ",");
 
 			pthread_mutex_lock(&m->output_mutex);
-			printf(
-				"{\"name\":\"%s\",\"full_text\":\"%s\"}%s",
-				m->name, m->output, module_end
-			);
+			if (m->output_visible) {
+				printf(
+					"{\"name\":\"%s\",\"full_text\":\"%s\"}%s",
+					m->name, m->output, module_end
+				);
+			}
 			pthread_mutex_unlock(&m->output_mutex);
 
 			n = n->next;

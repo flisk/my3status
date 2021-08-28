@@ -6,8 +6,9 @@
 static char output[MAX_OUTPUT] = { 0xf0, 0x9f, 0x95, 0x9b, ' ', 0 };
 
 static struct my3status_module mod = {
-	.name	= "clock",
-	.output	= output
+	.name		= "clock",
+	.output		= output,
+	.output_visible	= true
 };
 
 static void *run(void *);

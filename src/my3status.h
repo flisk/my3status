@@ -7,6 +7,7 @@
 #include <errno.h>
 #include <error.h>
 #include <signal.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -24,8 +25,9 @@ struct my3status_state {
 
 struct my3status_module {
 	const char			*name;
-	char				*output;
 	struct my3status_state		*state;
+	char				*output;
+	bool				 output_visible;
 	pthread_mutex_t	 		 output_mutex;
 };
 

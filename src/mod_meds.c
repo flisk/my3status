@@ -17,8 +17,9 @@
 static char output[MAX_OUTPUT] = "💊 ";
 
 static struct my3status_module mod = {
-	.name	= "meds",
-	.output	= output
+	.name		= "meds",
+	.output		= output,
+	.output_visible	= true
 };
 
 const char *SQL_LATEST_RECORD =

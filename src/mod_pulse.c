@@ -7,8 +7,9 @@
 static char output[MAX_OUTPUT] = "🔈 ";
 
 static struct my3status_module mod = {
-	.name	= "pulse",
-	.output	= output
+	.name		= "pulse",
+	.output		= output,
+	.output_visible	= true
 };
 
 static void on_context_state_change(pa_context *, void *);
