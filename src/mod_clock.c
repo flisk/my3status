@@ -1,3 +1,5 @@
+#include <stdint.h>
+#include <sys/timerfd.h>
 #include <time.h>
 #include "modules.h"
 
@@ -12,6 +14,8 @@ static struct my3status_module mod = {
 };
 
 static void *run(void *);
+static void start_timer(int);
+static void update_time();
 
 int mod_clock_init(struct my3status_state *my3status)
 {
@@ -29,59 +33,85 @@ int mod_clock_init(struct my3status_state *my3status)
 
 static void *run(__attribute__((unused)) void *arg)
 {
+	time_t now;
+
+	int timer = timerfd_create(CLOCK_REALTIME, 0);
+	if (timer == -1) {
+		error(1, errno, "mod_clock: timerfd_create");
+	}
+
+	now = time(NULL);
+	update_time(now);
+	start_timer(timer);
+
+	uint64_t expirations;
+	ssize_t s;
 	while (1) {
-		time_t now = time(NULL);
-		struct tm *tm = localtime(&now);
+		s = read(timer, &expirations, sizeof(expirations));
 
-		if (tm == NULL) {
-			error(0, errno, "localtime");
-			goto update_and_sleep;
+		now = time(NULL);
+		update_time(now);
+
+		if (s != -1) {
+			// normal expiration
+			continue;
 		}
 
-		pthread_mutex_lock(&mod.output_mutex);
-
-		output[3] =
-			tm->tm_hour > 0
-			? 0x90 + (tm->tm_hour - 1) % 12
-			: 0x9b;
-		
-		if (strftime(output + 5, MAX_OUTPUT - 5, "%a %-d %b %R", tm) == 0) {
-			error(0, errno, "strftime");
+		if (errno == ECANCELED) {
+			// system time was changed
+			start_timer(timer);
+		} else {
+			error(1, errno, "mod_clock: read");
 		}
-
-		pthread_mutex_unlock(&mod.output_mutex);
-
-	update_and_sleep:
-		my3status_update(&mod);
-
-		// Micro-optimization: unix timestamp mod 60 is a lot faster for
-		// determining seconds in the current minute vs. letting localtime do
-		// its whole song and dance.
-		int seconds_in_minute = now % 60;
-
-		// Let's talk about leap seconds.
-		// 
-		// The time_t we acquired above is a traditional Unix timestamp, meaning
-		// an integer representing the seconds that have passed since 1970-01-01
-		// 00:00 UTC. This value is specifically defined to increase by exactly
-		// 86400 every day.
-		// 
-		// This definition leaves no room for leap seconds, so they simply do
-		// not exist on Unix systems. Instead, the system clock is slowed down
-		// to accommodate actual time, meaning during a leap second, tm_sec is
-		// going to remain stuck at 59 for two seconds.
-		// 
-		// Which means: if we sleep for 60 - tm_sec seconds until the next
-		// update, we'll get the correct time MOST of the time, but if there's a
-		// leap second occurring, we'll miss the minute change.
-		// 
-		// Is this worth handling? Probably not. But there's a really easy hack
-		// we can do to "fix" this: sleep for an extra second. This means our
-		// displayed time will always drag by a second, but minute changes
-		// during leap seconds won't be missed.
-		sleep(61 - seconds_in_minute);
 	}
 
 	// should not be reachable
 	return NULL;
+}
+
+static void start_timer(int tfd)
+{
+	static struct itimerspec t = {
+		.it_interval = (struct timespec) { .tv_sec = 60, .tv_nsec = 0 },
+		.it_value = (struct timespec) { 0 }
+	};
+
+	static struct timespec now = { 0 };
+
+	if (clock_gettime(CLOCK_REALTIME, &now) == -1) {
+		error(1, errno, "mod_clock: clock_gettime");
+	}
+
+	time_t seconds_left = 60 - now.tv_sec % 60;
+	t.it_value.tv_sec = now.tv_sec + seconds_left;
+	t.it_value.tv_nsec = 1000000000L - now.tv_nsec;
+
+	int flags = TFD_TIMER_ABSTIME | TFD_TIMER_CANCEL_ON_SET;
+	if (timerfd_settime(tfd, flags, &t, NULL) == -1) {
+		error(1, errno, "mod_clock: timerfd_settime");
+	}
+}
+
+static void update_time(time_t now)
+{
+	struct tm *tm = localtime(&now);
+
+	if (tm == NULL) {
+		error(1, errno, "localtime");
+	}
+
+	pthread_mutex_lock(&mod.output_mutex);
+
+	output[3] =
+		tm->tm_hour > 0
+		? 0x90 + (tm->tm_hour - 1) % 12
+		: 0x9b;
+
+	if (strftime(output + 5, MAX_OUTPUT - 5, "%a %-d %b %R", tm) == 0) {
+		error(1, errno, "strftime");
+	}
+
+	pthread_mutex_unlock(&mod.output_mutex);
+
+	my3status_update(&mod);
 }
