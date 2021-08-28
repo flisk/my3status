@@ -1,6 +1,6 @@
 #include <math.h>
 #include <pulse/pulseaudio.h>
-#include "mod_pulse.h"
+#include "modules.h"
 
 #define MAX_OUTPUT 16
 

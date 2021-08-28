@@ -3,12 +3,7 @@
 #include <sys/signalfd.h>
 
 #include "my3status.h"
-
-#include "mod_clock.h"
-#include "mod_df.h"
-#include "mod_meds.h"
-#include "mod_pulse.h"
-#include "mod_sysinfo.h"
+#include "modules.h"
 
 static int parse_args(int, char **, struct my3status_state *);
 

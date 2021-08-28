@@ -1,5 +1,5 @@
 #include <time.h>
-#include "mod_clock.h"
+#include "modules.h"
 
 #define MAX_OUTPUT 32
 

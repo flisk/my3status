@@ -1,5 +1,5 @@
 #include <sys/sysinfo.h>
-#include "mod_sysinfo.h"
+#include "modules.h"
 
 // this is kinda big because the possible range for long values is, well, long
 #define MAX_OUTPUT 512
