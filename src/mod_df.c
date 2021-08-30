@@ -6,30 +6,25 @@
 
 static char output[MAX_OUTPUT] = "💾 ";
 
-static struct my3status_module mod = {
-	.name		= "df",
-	.output		= output,
-	.output_visible	= true
-};
-
 static void *run(void *);
 
-int mod_df_init(struct my3status_state *my3status)
+int mod_df_init(struct my3status_state *s)
 {
-	mod.state = my3status;
+	struct my3status_module *m =
+		my3status_register_module(s, "df", output, true);
 
-	pthread_t t;
-	if (pthread_mutex_init(&mod.output_mutex, NULL) != 0 ||
-	    pthread_create(&t, NULL, run, NULL) != 0) {
+	pthread_t p;
+	if (pthread_create(&p, NULL, run, m) != 0) {
 		return -1;
 	}
 
-	my3status_add_module(my3status, &mod);
 	return 0;
 }
 
-static void *run(__attribute__((unused)) void *arg)
+static void *run(void *arg)
 {
+	struct my3status_module *m = arg;
+
 	struct statfs s;
 	int previous_used_percent = -1;
 
@@ -47,11 +42,9 @@ static void *run(__attribute__((unused)) void *arg)
 			goto sleep;
 		}
 
-		pthread_mutex_lock(&mod.output_mutex);
+		my3status_output_begin(m);
 		snprintf(output + 5, MAX_OUTPUT - 5, "%d%%", used_percent);
-		pthread_mutex_unlock(&mod.output_mutex);
-
-		my3status_update(&mod);
+		my3status_output_done(m);
 
 		previous_used_percent = used_percent;
 

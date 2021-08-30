@@ -16,39 +16,35 @@
 
 static char output[MAX_OUTPUT] = "💊 ";
 
-static struct my3status_module mod = {
-	.name		= "meds",
-	.output		= output,
-	.output_visible	= true
-};
-
 const char *SQL_LATEST_RECORD =
 	"SELECT \"when\" FROM \"pills_taken\" WHERE \"which\" = ? "
 	"ORDER BY \"when\" DESC "
 	"LIMIT 1";
 
 static void *run(void *);
-static time_t update_output();
+static time_t update_output(struct my3status_module *, sqlite3 *,
+			    sqlite3_stmt *);
 
 static void db_connect(sqlite3 **, sqlite3_stmt **);
 static int db_init_watch();
 
-int mod_meds_init(struct my3status_state *state)
+int mod_meds_init(struct my3status_state *s)
 {
-	mod.state = state;
+	struct my3status_module *m =
+		my3status_register_module(s, "meds", output, true);
 
 	pthread_t p;
-	if (pthread_mutex_init(&mod.output_mutex, NULL) != 0 ||
-	    pthread_create(&p, NULL, run, NULL) != 0) {
+	if (pthread_create(&p, NULL, run, m) != 0) {
 		return -1;
 	}
 
-	my3status_add_module(state, &mod);
 	return 0;
 }
 
-static void *run(__attribute__((unused)) void *arg)
+static void *run(void *arg)
 {
+	struct my3status_module *m = arg;
+
 	sqlite3 *db = NULL;
 	sqlite3_stmt *latest_record_stmt = NULL;
 
@@ -62,7 +58,7 @@ static void *run(__attribute__((unused)) void *arg)
 	ssize_t s;
 	char buf[INOTIFY_BUF_SIZE];
 	while (1) {
-		time_t sleep_for = update_output(db, latest_record_stmt);
+		time_t sleep_for = update_output(m, db, latest_record_stmt);
 
 		int r = poll(pollfds, 1, sleep_for * 1000);
 
@@ -84,8 +80,11 @@ static void *run(__attribute__((unused)) void *arg)
 	return NULL;
 }
 
-static time_t update_output(sqlite3 *db, sqlite3_stmt *latest_record_stmt)
-{
+static time_t update_output(
+	struct my3status_module	*m,
+	sqlite3			*db,
+	sqlite3_stmt		*latest_record_stmt
+) {
 	static uint64_t previous_minutes = -1;
 	static uint64_t previous_hours = -1;
 	static uint64_t previous_days = -1;
@@ -133,7 +132,7 @@ retry:
 		goto no_output_update;
 	}
 
-	pthread_mutex_lock(&mod.output_mutex);
+	my3status_output_begin(m);
 
 	if (days > 0) {
 		snprintf(output + 5, MAX_OUTPUT - 5, "%ldd", days);
@@ -141,8 +140,7 @@ retry:
 		snprintf(output + 5, MAX_OUTPUT - 5, "%01ld:%02ld", hours, minutes);
 	}
 
-	pthread_mutex_unlock(&mod.output_mutex);
-	my3status_update(&mod);
+	my3status_output_done(m);
 
 no_output_update:
 	previous_minutes = minutes;

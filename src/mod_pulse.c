@@ -6,12 +6,6 @@
 
 static char output[MAX_OUTPUT] = "🔈 ";
 
-static struct my3status_module mod = {
-	.name		= "pulse",
-	.output		= output,
-	.output_visible	= true
-};
-
 static void on_context_state_change(pa_context *, void *);
 static void on_subscribed(pa_context *, int, void *);
 static void on_state_change(pa_context *, pa_subscription_event_type_t,
@@ -19,13 +13,10 @@ static void on_state_change(pa_context *, pa_subscription_event_type_t,
 static void on_server_info(pa_context *, const pa_server_info *, void *);
 static void on_sink_info(pa_context *, const pa_sink_info *, int, void *);
 
-int mod_pulse_init(struct my3status_state *state)
+int mod_pulse_init(struct my3status_state *s)
 {
-	mod.state = state;
-
-	if (pthread_mutex_init(&mod.output_mutex, NULL) != 0) {
-		error(1, errno, "pthread_mutex_init");
-	}
+	struct my3status_module *m =
+		my3status_register_module(s, "pulse", output, true);
 
 	pa_threaded_mainloop *mainloop = pa_threaded_mainloop_new();
 
@@ -36,8 +27,8 @@ int mod_pulse_init(struct my3status_state *state)
 	pa_mainloop_api *mainloop_api = pa_threaded_mainloop_get_api(mainloop);
 	pa_context *context = pa_context_new(mainloop_api, "my3status");
 
-	pa_context_set_state_callback(context, on_context_state_change, state);
-	pa_context_set_subscribe_callback(context, on_state_change, state);
+	pa_context_set_state_callback(context, on_context_state_change, m);
+	pa_context_set_subscribe_callback(context, on_state_change, m);
 
 	pa_threaded_mainloop_lock(mainloop);
 	int r = pa_context_connect(context, NULL, PA_CONTEXT_NOFAIL, NULL);
@@ -47,7 +38,6 @@ int mod_pulse_init(struct my3status_state *state)
 		error(1, 0, "pa_context_connect failed");
 	}
 
-	my3status_add_module(state, &mod);
 	return 0;
 }
 
@@ -98,16 +88,18 @@ static void on_sink_info(
 	__attribute__((unused)) pa_context	*context,
 	const pa_sink_info			*sink_info,
 	int					 eol,
-	__attribute__((unused)) void		*userdata
+	void					*userdata
 ) {
 	if (1 == eol) {
 		return;
 	}
 
+	struct my3status_module *m = userdata;
+
 	pa_volume_t volume_avg = pa_cvolume_avg(&sink_info->volume);
 	int volume_percent = (int) round((double) volume_avg * 100.0 / PA_VOLUME_NORM);
 
-	pthread_mutex_lock(&mod.output_mutex);
+	my3status_output_begin(m);
 
 	// Integer-dividing the volume by 34 gives an offset we can add to 0x88,
 	// producing the appropriate speaker volume emojis:
@@ -122,7 +114,5 @@ static void on_sink_info(
 	
 	snprintf(output + 5, MAX_OUTPUT - 5, "%d%%", volume_percent);
 
-	pthread_mutex_unlock(&mod.output_mutex);
-
-	my3status_update(&mod);
+	my3status_output_done(m);
 }

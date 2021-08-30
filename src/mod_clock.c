@@ -1,4 +1,3 @@
-#include <stdint.h>
 #include <sys/timerfd.h>
 #include <time.h>
 #include "my3status.h"
@@ -7,50 +6,43 @@
 
 static char output[MAX_OUTPUT] = { 0xf0, 0x9f, 0x95, 0x9b, ' ', 0 };
 
-static struct my3status_module mod = {
-	.name		= "clock",
-	.output		= output,
-	.output_visible	= true
-};
-
 static void *run(void *);
 static void start_timer(int);
-static void update_time();
+static void update_time(struct my3status_module *, time_t);
 
-int mod_clock_init(struct my3status_state *my3status)
+int mod_clock_init(struct my3status_state *state)
 {
-	mod.state = my3status;
+	struct my3status_module *m =
+		my3status_register_module(state, "clock", output, true);
 
-	pthread_t t;
-	if (pthread_mutex_init(&mod.output_mutex, NULL) != 0 ||
-	    pthread_create(&t, NULL, run, NULL) != 0) {
+	pthread_t p;
+	if (pthread_create(&p, NULL, run, m) != 0) {
 		return -1;
 	}
 
-	my3status_add_module(my3status, &mod);
 	return 0;
 }
 
-static void *run(__attribute__((unused)) void *arg)
+static void *run(void *arg)
 {
-	time_t now;
+	struct my3status_module *m = arg;
 
 	int timer = timerfd_create(CLOCK_REALTIME, 0);
 	if (timer == -1) {
 		error(1, errno, "mod_clock: timerfd_create");
 	}
 
-	now = time(NULL);
-	update_time(now);
+	time_t now = time(NULL);
+	update_time(m, now);
 	start_timer(timer);
 
-	uint64_t expirations;
+	unsigned long expirations;
 	ssize_t s;
 	while (1) {
 		s = read(timer, &expirations, sizeof(expirations));
-
 		now = time(NULL);
-		update_time(now);
+
+		update_time(m, now);
 
 		if (s != -1) {
 			// normal expiration
@@ -92,7 +84,7 @@ static void start_timer(int tfd)
 	}
 }
 
-static void update_time(time_t now)
+static void update_time(struct my3status_module *m, time_t now)
 {
 	struct tm *tm = localtime(&now);
 
@@ -100,7 +92,7 @@ static void update_time(time_t now)
 		error(1, errno, "localtime");
 	}
 
-	pthread_mutex_lock(&mod.output_mutex);
+	my3status_output_begin(m);
 
 	output[3] =
 		tm->tm_hour > 0
@@ -111,7 +103,5 @@ static void update_time(time_t now)
 		error(1, errno, "strftime");
 	}
 
-	pthread_mutex_unlock(&mod.output_mutex);
-
-	my3status_update(&mod);
+	my3status_output_done(m);
 }
