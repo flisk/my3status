@@ -1,6 +1,6 @@
 #include <math.h>
 #include <sys/vfs.h>
-#include "modules.h"
+#include "my3status.h"
 
 #define MAX_OUTPUT 16
 

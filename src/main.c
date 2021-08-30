@@ -3,7 +3,6 @@
 #include <sys/signalfd.h>
 
 #include "my3status.h"
-#include "modules.h"
 
 static int parse_args(int, char **, struct my3status_state *);
 

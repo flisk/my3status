@@ -45,3 +45,12 @@ void my3status_add_module(struct my3status_state *, struct my3status_module *);
  * Notifies the main thread that updated output is available.
  */
 void my3status_update(struct my3status_module *);
+
+/* Internal modules */
+
+int mod_apt_init(struct my3status_state *);
+int mod_clock_init(struct my3status_state *);
+int mod_df_init(struct my3status_state *);
+int mod_meds_init(struct my3status_state *);
+int mod_pulse_init(struct my3status_state *);
+int mod_sysinfo_init(struct my3status_state *);

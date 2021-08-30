@@ -1,5 +1,5 @@
 #include <sys/sysinfo.h>
-#include "modules.h"
+#include "my3status.h"
 
 // this is kinda big because the possible range for long values is, well, long
 #define MAX_OUTPUT 512

@@ -6,7 +6,7 @@
 #include <time.h>
 
 #include <sqlite3.h>
-#include "modules.h"
+#include "my3status.h"
 
 #define MAX_OUTPUT 32
 #define STUPID_HARDCODED_DB_PATH "/home/tobias/Nextcloud/meds.sqlite"

@@ -1,7 +1,7 @@
 #include <stdint.h>
 #include <sys/timerfd.h>
 #include <time.h>
-#include "modules.h"
+#include "my3status.h"
 
 #define MAX_OUTPUT 32
 
