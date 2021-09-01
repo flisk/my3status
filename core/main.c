@@ -1,14 +1,21 @@
-#include <assert.h>
+#include <dlfcn.h>
 #include <fcntl.h>
 #include <sys/signalfd.h>
 
 #include "my3status.h"
 
+// because vscode is stupid
+#ifndef MY3STATUS_MODULE_PREFIX
+#define MY3STATUS_MODULE_PREFIX ""
+#endif
+
 static int parse_args(int, char **, struct my3status_state *);
+
+static int load_external_module(struct my3status_state *, const char *);
+static char *generate_module_path(const char *);
 
 static int listen_sigusr1();
 static void wait_for_signals(int);
-static void append_module(struct my3status_state *, struct my3status_module *);
 
 int main(int argc, char **argv)
 {
@@ -26,7 +33,7 @@ int main(int argc, char **argv)
 	if (parse_args(argc, argv, &state) == -1) {
 		exit(EXIT_FAILURE);
 	}
-	
+
 	printf("{\"version\":1}\n"
 	       "[\n");
 
@@ -84,8 +91,6 @@ static int listen_sigusr1()
 
 static int parse_args(int argc, char **argv, struct my3status_state *state)
 {
-	int r = 0;
-
 	if (argc == 1) {
 		fputs("no modules specified. for a list of modules, run "
 		      "`strings` on this program and guess which strings might"
@@ -94,8 +99,11 @@ static int parse_args(int argc, char **argv, struct my3status_state *state)
 		return -1;
 	}
 
+	int r = 0;
 	for (int i = 1; i < argc; ++i) {
-		if (strcmp("clock", argv[i]) == 0) {
+		if (strcmp("apt", argv[i]) == 0) {
+			mod_apt_init(state);
+		} else if (strcmp("clock", argv[i]) == 0) {
 			mod_clock_init(state);
 		} else if (strcmp("df", argv[i]) == 0) {
 			mod_df_init(state);
@@ -105,13 +113,69 @@ static int parse_args(int argc, char **argv, struct my3status_state *state)
 			mod_pulse_init(state);
 		} else if (strcmp("sysinfo", argv[i]) == 0) {
 			mod_sysinfo_init(state);
-		} else {
+		} else if (load_external_module(state, argv[i]) == -1) {
+			fprintf(stderr, "invalid module: %s\n", argv[i]);
 			r = -1;
-			fprintf(stderr, "invalid module: '%s'\n", argv[i]);
 		}
 	}
 
 	return r;
+}
+
+static int load_external_module(struct my3status_state *s, const char *name)
+{
+	char *module_path = generate_module_path(name);
+	if (module_path == NULL) {
+		return -1;
+	}
+
+	void *dl = dlopen(module_path, RTLD_LAZY);
+	free(module_path);
+
+	if (dl == NULL) {
+		fprintf(stderr, "%s: dlopen: %s\n", __func__, dlerror());
+		return -1;
+	}
+
+	void (*module_init)(struct my3status_state *);
+	module_init = dlsym(dl, "my3status_module_init");
+
+	if (module_init == NULL) {
+		fprintf(stderr, "%s: dlsym: %s\n", __func__, dlerror());
+		return -1;
+	}
+
+	module_init(s);
+
+	return 0;
+}
+
+static char *generate_module_path(const char *name)
+{
+	size_t name_len = strlen(name);
+	if (strcmp(name + name_len - 3, ".so") != 0) {
+		fprintf(stderr, "%s: name doesn't end with .so: %s\n",
+			__func__, name);
+		return NULL;
+	}
+
+	const char *module_prefix = getenv("MY3STATUS_MODULE_PREFIX");
+	if (module_prefix == NULL) {
+		module_prefix = MY3STATUS_MODULE_PREFIX;
+	}
+
+	size_t prefix_len = strlen(module_prefix);
+	char *s = calloc(1, prefix_len + name_len + 2);
+	if (s == NULL) {
+		error(0, errno, "%s: calloc: ", __func__);
+		return NULL;
+	}
+
+	strcpy(s, module_prefix);
+	s[prefix_len] = '/';
+	strcpy(s + 1 + prefix_len, name);
+
+	return s;
 }
 
 static void wait_for_signals(int sfd)
@@ -141,72 +205,4 @@ static void wait_for_signals(int sfd)
 
 	// revert signalfd to blocking mode for next iteration
 	fcntl(sfd, F_SETFL, flags);
-}
-
-static void append_module(
-	struct my3status_state	*state,
-	struct my3status_module	*module
-) {
-	assert(state->first_module == NULL || state->last_module != NULL);
-
-	struct my3status_module_node *item
-		= malloc(sizeof(struct my3status_module_node));
-	if (item == NULL) {
-		error(1, errno, "malloc");
-	}
-
-	item->module = module;
-	item->next = NULL;
-
-	struct my3status_module_node **dest_ptr;
-	if (state->first_module == NULL) {
-		dest_ptr = &state->first_module;
-	} else {
-		dest_ptr = &state->last_module->next;
-	}
-
-	*dest_ptr = item;
-	state->last_module = item;
-}
-
-struct my3status_module *my3status_register_module(
-	struct my3status_state	*state,
-	const char		*name,
-	const char		*output,
-	bool			 visible
-) {
-	struct my3status_module *m = calloc(1, sizeof(struct my3status_module));
-	if (m == NULL) {
-		error(1, errno, "calloc");
-	}
-
-	if (pthread_mutex_init(&m->output_mutex, NULL) != 0) {
-		error(1, errno, "pthread_mutex_init");
-	}
-	
-	m->state = state;
-	m->name = name;
-	m->output = output;
-	m->output_visible = visible;
-
-	append_module(state, m);
-
-	return m;
-}
-
-void my3status_output_begin(struct my3status_module *m)
-{
-	if (pthread_mutex_lock(&m->output_mutex) != 0) {
-		error(1, errno, "pthread_mutex_lock");
-	}
-}
-
-void my3status_output_done(struct my3status_module *m)
-{
-	if (pthread_mutex_unlock(&m->output_mutex) != 0) {
-		error(1, errno, "pthread_mutex_unlock");
-	}
-
-	//fprintf(stderr, "\t%s triggered update\n", m->name);
-	pthread_kill(m->state->main_thread, SIGUSR1);
 }

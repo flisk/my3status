@@ -1,0 +1,16 @@
+[package]
+name = "my3status_imap"
+version = "0.1.0"
+edition = "2018"
+publish = false
+
+[lib]
+name = "imap"
+crate-type = ["dylib"]
+
+[dependencies]
+imap = "3.0.0-alpha"
+my3status = { path = "../lib-rs" }
+serde = "^1.0.130"
+serde_derive = "^1.0.130"
+toml = "^0.5.8"
