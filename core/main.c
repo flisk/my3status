@@ -113,6 +113,8 @@ static int parse_args(int argc, char **argv, struct my3status_state *state)
 			mod_pulse_init(state);
 		} else if (strcmp("sysinfo", argv[i]) == 0) {
 			mod_sysinfo_init(state);
+		} else if (strcmp("inoitems", argv[i]) == 0) {
+			mod_inoitems_init(state);
 		} else if (load_external_module(state, argv[i]) == -1) {
 			fprintf(stderr, "invalid module: %s\n", argv[i]);
 			r = -1;

@@ -13,6 +13,12 @@
 #include <string.h>
 #include <unistd.h>
 
+#define PANIC(errno, format, ...) \
+        error( \
+                1, (errno), ("[%s:%d] " format), \
+                __func__, __LINE__ __VA_OPT__(,) __VA_ARGS__ \
+        )
+
 struct my3status_module;
 
 /* Main application state */
@@ -54,6 +60,7 @@ int my3status_init_internal_module(
 int mod_apt_init(struct my3status_state *);
 int mod_clock_init(struct my3status_state *);
 int mod_df_init(struct my3status_state *);
+int mod_inoitems_init(struct my3status_state *);
 int mod_meds_init(struct my3status_state *);
 int mod_pulse_init(struct my3status_state *);
 int mod_sysinfo_init(struct my3status_state *);
