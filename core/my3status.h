@@ -44,15 +44,19 @@ struct my3status_module *my3status_register_module(
 	bool visible
 );
 
-void my3status_output_begin(struct my3status_module *);
-
-void my3status_output_done(struct my3status_module *);
-
-/* Internal modules */
-
+int my3status_init_internal_module(
+	struct my3status_state	*state,
+	const char		*name,
+	const char		*output,
+	bool			 initially_visible,
+	void			*(*run)(void *)
+);
 int mod_apt_init(struct my3status_state *);
 int mod_clock_init(struct my3status_state *);
 int mod_df_init(struct my3status_state *);
 int mod_meds_init(struct my3status_state *);
 int mod_pulse_init(struct my3status_state *);
 int mod_sysinfo_init(struct my3status_state *);
+
+void my3status_output_begin(struct my3status_module *);
+void my3status_output_done(struct my3status_module *);

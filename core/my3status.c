@@ -68,3 +68,36 @@ void my3status_output_done(struct my3status_module *m)
 	//fprintf(stderr, "\t%s triggered update\n", m->name);
 	pthread_kill(m->state->main_thread, SIGUSR1);
 }
+
+int my3status_init_internal_module(
+	struct my3status_state	*state,
+	const char		*name,
+	const char		*output,
+	bool			 initially_visible,
+	void			*(*run)(void *)
+) {
+	struct my3status_module *m = my3status_register_module(
+		state, name, output, initially_visible
+	);
+
+	int r;
+
+	pthread_attr_t attrs;
+	r = pthread_attr_init(&attrs);
+	if (r != 0) {
+		return -1;
+	}
+
+	r = pthread_attr_setdetachstate(&attrs, PTHREAD_CREATE_DETACHED);
+	if (r != 0) {
+		return -1;
+	}
+
+	pthread_t p;
+	r = pthread_create(&p, NULL, run, m);
+	if (r != 0) {
+		return -1;
+	}
+
+	return 0;
+}

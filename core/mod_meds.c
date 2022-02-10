@@ -10,14 +10,14 @@
 
 #define MAX_OUTPUT 32
 #define STUPID_HARDCODED_DB_PATH "/home/tobias/Nextcloud/meds.sqlite"
-#define STUPID_HARDCODED_PILL_TYPE "ritalin"
 
 #define INOTIFY_BUF_SIZE (sizeof(struct inotify_event) + NAME_MAX + 1)
 
 static char output[MAX_OUTPUT] = "💊 ";
 
 const char *SQL_LATEST_RECORD =
-	"SELECT \"when\" FROM \"pills_taken\" WHERE \"which\" = ? "
+	"SELECT \"when\", \"which\" FROM \"pills_taken\" "
+	"WHERE \"which\" IN ('ritalin', 'medikinet') "
 	"ORDER BY \"when\" DESC "
 	"LIMIT 1";
 
@@ -30,15 +30,9 @@ static int db_init_watch();
 
 int mod_meds_init(struct my3status_state *s)
 {
-	struct my3status_module *m =
-		my3status_register_module(s, "meds", output, true);
-
-	pthread_t p;
-	if (pthread_create(&p, NULL, run, m) != 0) {
-		return -1;
-	}
-
-	return 0;
+	return my3status_init_internal_module(
+		s, "meds", output, true, run
+	);
 }
 
 static void *run(void *arg)
@@ -91,11 +85,6 @@ static time_t update_output(
 
 	int r;
 
-	r = sqlite3_bind_text(latest_record_stmt, 1, STUPID_HARDCODED_PILL_TYPE, -1, SQLITE_STATIC);
-	if (r != SQLITE_OK) {
-		error(1, 0, "can't bind parameter: %d, %s", r, sqlite3_errmsg(db));
-	}
-
 retry:
 	r = sqlite3_step(latest_record_stmt);
 	switch (r) {
@@ -106,16 +95,16 @@ retry:
 		fprintf(stderr, "meds db is locked, retrying in 10 ms\n");
 		usleep(10 * 1000);
 		goto retry;
-	
+
 	default:
 		error(1, 0, "can't execute statement: %d, %s", r, sqlite3_errmsg(db));
 	}
 
 	sqlite_int64 time_value = sqlite3_column_int64(latest_record_stmt, 0);
 
-	r = sqlite3_reset(latest_record_stmt);
-	if (r != SQLITE_OK) {
-		error(1, 0, "can't reset statement: %s", sqlite3_errmsg(db));
+	const unsigned char *which = sqlite3_column_text(latest_record_stmt, 1);
+	if (which == NULL) {
+		which = (unsigned char *) "NULL";
 	}
 
 	uint64_t now = (uint64_t) time(NULL);
@@ -135,12 +124,17 @@ retry:
 	my3status_output_begin(m);
 
 	if (days > 0) {
-		snprintf(output + 5, MAX_OUTPUT - 5, "%ldd", days);
+		snprintf(output + 5, MAX_OUTPUT - 5, "%s %ldd", which, days);
 	} else {
-		snprintf(output + 5, MAX_OUTPUT - 5, "%01ld:%02ld", hours, minutes);
+		snprintf(output + 5, MAX_OUTPUT - 5, "%s %01ld:%02ld", which, hours, minutes);
 	}
 
 	my3status_output_done(m);
+
+	r = sqlite3_reset(latest_record_stmt);
+	if (r != SQLITE_OK) {
+		error(1, 0, "can't reset statement: %s", sqlite3_errmsg(db));
+	}
 
 no_output_update:
 	previous_minutes = minutes;

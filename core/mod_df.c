@@ -10,15 +10,9 @@ static void *run(void *);
 
 int mod_df_init(struct my3status_state *s)
 {
-	struct my3status_module *m =
-		my3status_register_module(s, "df", output, true);
-
-	pthread_t p;
-	if (pthread_create(&p, NULL, run, m) != 0) {
-		return -1;
-	}
-
-	return 0;
+	return my3status_init_internal_module(
+		s, "df", output, true, run
+	);
 }
 
 static void *run(void *arg)
