@@ -1,7 +1,7 @@
 PREFIX ?= /usr/local
 BUILD_DIR ?= build
 
-LIBS := libpulse sqlite3
+LIBS := libpulse
 
 ifeq ($(DEBUG), 0)
 CFLAGS := -O2

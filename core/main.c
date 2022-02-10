@@ -101,14 +101,10 @@ static int parse_args(int argc, char **argv, struct my3status_state *state)
 
 	int r = 0;
 	for (int i = 1; i < argc; ++i) {
-		if (strcmp("apt", argv[i]) == 0) {
-			mod_apt_init(state);
-		} else if (strcmp("clock", argv[i]) == 0) {
+		if (strcmp("clock", argv[i]) == 0) {
 			mod_clock_init(state);
 		} else if (strcmp("df", argv[i]) == 0) {
 			mod_df_init(state);
-		} else if (strcmp("meds", argv[i]) == 0) {
-			mod_meds_init(state);
 		} else if (strcmp("pulse", argv[i]) == 0) {
 			mod_pulse_init(state);
 		} else if (strcmp("sysinfo", argv[i]) == 0) {
