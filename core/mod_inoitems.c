@@ -121,11 +121,9 @@ static void print_items(struct my3status_module *m)
 		free(names[i]);
 	}
 
-	free(names);
-
-	*(output_ptr - 1) = '\0';
-
 	my3status_output_done(m);
+
+	free(names);
 }
 
 static void print_item(const char *file, int last, char **output_ptr)
@@ -143,13 +141,11 @@ static void print_item(const char *file, int last, char **output_ptr)
 		goto error;
 	}
 
-	if (!last) {
-		if (n > 0 && buf[n - 1] == '\n') {
-			buf[n - 1] = '/';
-		} else {
-			buf[n] = '/';
-			n += 1;
-		}
+	if (n > 0 && buf[n - 1] == '\n') {
+		buf[n - 1] = last ? '\0' : '/';
+	} else {
+		buf[n] = last ? '\0' : '/';
+		n += 1;
 	}
 
 	*output_ptr += n;
