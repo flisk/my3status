@@ -60,6 +60,7 @@ int my3status_init_internal_module(
 int mod_clock_init(struct my3status_state *);
 int mod_df_init(struct my3status_state *);
 int mod_inoitems_init(struct my3status_state *);
+int mod_meds_init(struct my3status_state *);
 int mod_pulse_init(struct my3status_state *);
 int mod_sysinfo_init(struct my3status_state *);
 
